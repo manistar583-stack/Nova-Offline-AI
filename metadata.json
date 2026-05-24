@@ -1,0 +1,6 @@
+{
+  "name": "Nova Assistant",
+  "description": "An advanced, smart AI assistant matching capabilities of Claude and GPT-4. Supports creating high-quality images intuitively.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
