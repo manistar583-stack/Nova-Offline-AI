@@ -68,9 +68,6 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
 }
 
 export const googleProvider = new GoogleAuthProvider();
-googleProvider.addScope('https://www.googleapis.com/auth/drive.file');
-googleProvider.addScope('https://www.googleapis.com/auth/drive.readonly');
-googleProvider.addScope('https://www.googleapis.com/auth/sheets');
 
 // We'll also support GitHub but we need to import it
 import { GithubAuthProvider } from "firebase/auth";
