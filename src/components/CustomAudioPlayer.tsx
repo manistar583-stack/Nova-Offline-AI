@@ -151,7 +151,7 @@ export function CustomAudioPlayer({ src }: { src: string }) {
         {/* Play/Pause Button */}
         <button 
           onClick={togglePlayPause}
-          className="flex-shrink-0 w-10 h-10 flex items-center justify-center bg-nova-accent hover:bg-nova-accent/80 text-white rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-nova-accent focus:ring-offset-2 focus:ring-offset-gray-900"
+          className="flex-shrink-0 w-10 h-10 flex items-center justify-center bg-nova-accent hover:bg-nova-accent/80 text-gray-900 dark:text-white rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-nova-accent focus:ring-offset-2 focus:ring-offset-gray-900"
         >
           {isPlaying ? <Pause size={20} className="fill-current" /> : <Play size={20} className="fill-current ml-1" />}
         </button>
@@ -174,7 +174,7 @@ export function CustomAudioPlayer({ src }: { src: string }) {
         {/* Mute Button */}
         <button 
           onClick={toggleMute}
-          className="flex-shrink-0 text-gray-400 hover:text-white transition-colors"
+          className="flex-shrink-0 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:text-white transition-colors"
         >
           {isMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
         </button>
@@ -183,7 +183,7 @@ export function CustomAudioPlayer({ src }: { src: string }) {
         <a 
           href={src} 
           download="audio.mp3"
-          className="flex-shrink-0 text-gray-400 hover:text-white transition-colors"
+          className="flex-shrink-0 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:text-white transition-colors"
           title="Download audio"
         >
           <Download size={18} />
@@ -191,7 +191,7 @@ export function CustomAudioPlayer({ src }: { src: string }) {
       </div>
 
       {/* Progress Bar & Time */}
-      <div className="flex items-center gap-3 mt-3 text-xs text-gray-400 font-mono">
+      <div className="flex items-center gap-3 mt-3 text-xs text-gray-600 dark:text-gray-400 font-mono">
         <span>{formatTime(currentTime)}</span>
         <input 
           type="range" 

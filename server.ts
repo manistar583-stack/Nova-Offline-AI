@@ -186,6 +186,28 @@ curl -X POST http://127.0.0.1:8188/prompt -H "Content-Type: application/json" -d
     }
   });
 
+  // API route for title generation
+  app.post("/api/generate-title", async (req, res) => {
+    try {
+      const { message } = req.body;
+      const titlePrompt = `Generate a very concise, 2-5 word title for a conversation that starts with the following message. Do not include quotes or extra punctuation.\n\nMessage: "${message}"`;
+      
+      const chatResponse = await ai.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: [
+          { role: "user", parts: [{ text: titlePrompt }] }
+        ],
+        config: {
+          temperature: 0.7,
+        }
+      });
+      res.json({ title: chatResponse.text?.trim() || "New Chat" });
+    } catch (error) {
+      console.error("Error generating title:", error);
+      res.status(500).json({ title: "New Chat" });
+    }
+  });
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({

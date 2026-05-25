@@ -1,36 +1,50 @@
 {
   "entities": {
-    "chat": {
+    "Chat": {
       "title": "Chat",
-      "description": "A conversation instance containing messages.",
+      "description": "A conversation session",
       "type": "object",
       "properties": {
         "userId": { "type": "string" },
         "title": { "type": "string" },
-        "createdAt": { "type": "string", "format": "date-time" }
+        "createdAt": { "type": "timestamp" }
       },
-      "required": ["userId", "title"]
+      "required": ["userId", "title", "createdAt"]
     },
-    "message": {
+    "Message": {
       "title": "Message",
-      "description": "An individual message within a chat.",
+      "description": "A message within a chat session",
       "type": "object",
       "properties": {
-        "role": { "type": "string", "enum": ["user", "assistant"] },
+        "role": { "type": "string" },
         "content": { "type": "string" },
-        "createdAt": { "type": "string", "format": "date-time" }
+        "createdAt": { "type": "timestamp" }
       },
-      "required": ["role", "content"]
+      "required": ["role", "content", "createdAt"]
+    },
+    "UserProfile": {
+      "title": "User Profile",
+      "description": "User preferences and settings",
+      "type": "object",
+      "properties": {
+        "theme": { "type": "string", "enum": ["light", "dark"] },
+        "updatedAt": { "type": "timestamp" }
+      },
+      "required": ["theme", "updatedAt"]
     }
   },
   "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Stores user preferences and profile data"
+    },
     "/chats/{chatId}": {
-      "schema": "chat",
-      "description": "Stores user chat histories."
+      "schema": { "$ref": "#/entities/Chat" },
+      "description": "Stores user chat sessions"
     },
     "/chats/{chatId}/messages/{messageId}": {
-      "schema": "message",
-      "description": "Stores messages inside a specific chat."
+      "schema": { "$ref": "#/entities/Message" },
+      "description": "Stores individual messages within a chat session"
     }
   }
 }

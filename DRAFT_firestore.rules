@@ -34,24 +34,7 @@ service cloud.firestore {
              data.createdAt == request.time;
     }
 
-    function isValidUserProfile(data) {
-      return data.keys().hasAll(['theme', 'updatedAt']) &&
-             data.keys().size() == 2 &&
-             data.theme is string && (data.theme == 'light' || data.theme == 'dark') &&
-             data.updatedAt == request.time;
-    }
-
     // 4. Collection Rules
-    match /users/{userId} {
-      allow create: if isSignedIn() && request.auth.uid == userId && isValidUserProfile(incoming());
-      allow update: if isSignedIn() && request.auth.uid == userId && isValidUserProfile(incoming()) && (
-        incoming().diff(existing()).affectedKeys().hasOnly(['theme', 'updatedAt'])
-      );
-      allow get: if isSignedIn() && request.auth.uid == userId;
-      allow list: if false;
-      allow delete: if false;
-    }
-
     match /chats/{chatId} {
       allow create: if isSignedIn() && isValidId(chatId) && isValidChat(incoming());
       
@@ -69,15 +52,8 @@ service cloud.firestore {
         allow create: if isSignedIn() && isValidId(messageId) && isValidMessage(incoming()) && 
                       get(/databases/$(database)/documents/chats/$(chatId)).data.userId == request.auth.uid;
 
-        // Existing messages can be updated and deleted
-        allow update: if isSignedIn() && isValidId(messageId) && 
-                      get(/databases/$(database)/documents/chats/$(chatId)).data.userId == request.auth.uid &&
-                      incoming().role == existing().role &&
-                      incoming().createdAt == existing().createdAt &&
-                      incoming().diff(existing()).affectedKeys().hasOnly(['content']);
-        allow delete: if isSignedIn() && isValidId(messageId) && 
-                      get(/databases/$(database)/documents/chats/$(chatId)).data.userId == request.auth.uid;
-
+        // Existing messages can't be updated or deleted in this app based on what I see
+        
         allow get: if isSignedIn() && isValidId(messageId) && 
                    get(/databases/$(database)/documents/chats/$(chatId)).data.userId == request.auth.uid;
         // List query delegation:

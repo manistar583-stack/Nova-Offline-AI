@@ -46,13 +46,13 @@ export function ImageViewer({ src, alt }: { src: string; alt: string }) {
       <div className="group relative mt-4 inline-block w-full max-w-2xl overflow-hidden rounded-xl bg-black ring-1 ring-white/10">
         <img src={src} alt={alt} className="w-full h-auto object-contain transition-transform duration-700 ease-out group-hover:scale-[1.02]" loading="lazy" />
         <div className="absolute top-4 right-4 flex gap-2 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
-          <button onClick={() => setIsFullscreen(true)} className="flex h-9 w-9 items-center justify-center rounded-lg bg-black/60 text-white backdrop-blur-md transition-colors hover:bg-black/80 hover:text-nova-accent" title="Fullscreen">
+          <button onClick={() => setIsFullscreen(true)} className="flex h-9 w-9 items-center justify-center rounded-lg bg-black/60 text-gray-900 dark:text-white backdrop-blur-md transition-colors hover:bg-black/80 hover:text-nova-accent" title="Fullscreen">
             <Maximize size={18} />
           </button>
-          <button onClick={handleShare} className="flex h-9 w-9 items-center justify-center rounded-lg bg-black/60 text-white backdrop-blur-md transition-colors hover:bg-black/80 hover:text-nova-accent" title="Share">
+          <button onClick={handleShare} className="flex h-9 w-9 items-center justify-center rounded-lg bg-black/60 text-gray-900 dark:text-white backdrop-blur-md transition-colors hover:bg-black/80 hover:text-nova-accent" title="Share">
             <Share2 size={18} />
           </button>
-          <button onClick={handleDownload} className="flex h-9 w-9 items-center justify-center rounded-lg bg-black/60 text-white backdrop-blur-md transition-colors hover:bg-black/80 hover:text-nova-accent" title="Download">
+          <button onClick={handleDownload} className="flex h-9 w-9 items-center justify-center rounded-lg bg-black/60 text-gray-900 dark:text-white backdrop-blur-md transition-colors hover:bg-black/80 hover:text-nova-accent" title="Download">
             <Download size={18} />
           </button>
         </div>
@@ -60,7 +60,7 @@ export function ImageViewer({ src, alt }: { src: string; alt: string }) {
 
       {isFullscreen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/95 p-4 backdrop-blur-xl transition-all" onClick={() => setIsFullscreen(false)}>
-          <button className="absolute top-6 right-6 rounded-full bg-white/10 p-2.5 text-white backdrop-blur-md transition-colors hover:bg-white/20 hover:text-nova-accent" onClick={() => setIsFullscreen(false)}>
+          <button className="absolute top-6 right-6 rounded-full bg-white/10 p-2.5 text-gray-900 dark:text-white backdrop-blur-md transition-colors hover:bg-white/20 hover:text-nova-accent" onClick={() => setIsFullscreen(false)}>
             <X size={24} />
           </button>
           <img src={src} alt={alt} className="max-h-full max-w-full object-contain rounded-lg shadow-2xl" onClick={(e) => e.stopPropagation()} />
@@ -162,13 +162,13 @@ export function VideoViewer({ src, alt }: { src: string; alt: string }) {
         {/* Top-Right Actions */}
         {status !== 'rendering' && (
           <div className="absolute top-4 right-4 flex gap-2 opacity-0 transition-opacity duration-200 group-hover:opacity-100 z-10" onClick={e => e.stopPropagation()}>
-            <button onClick={() => setIsFullscreen(true)} className="flex h-9 w-9 items-center justify-center rounded-lg bg-black/60 text-white backdrop-blur-md transition-colors hover:bg-black/80 hover:text-nova-accent" title="Fullscreen">
+            <button onClick={() => setIsFullscreen(true)} className="flex h-9 w-9 items-center justify-center rounded-lg bg-black/60 text-gray-900 dark:text-white backdrop-blur-md transition-colors hover:bg-black/80 hover:text-nova-accent" title="Fullscreen">
               <Maximize size={18} />
             </button>
-            <button onClick={handleShare} className="flex h-9 w-9 items-center justify-center rounded-lg bg-black/60 text-white backdrop-blur-md transition-colors hover:bg-black/80 hover:text-nova-accent" title="Share">
+            <button onClick={handleShare} className="flex h-9 w-9 items-center justify-center rounded-lg bg-black/60 text-gray-900 dark:text-white backdrop-blur-md transition-colors hover:bg-black/80 hover:text-nova-accent" title="Share">
               <Share2 size={18} />
             </button>
-            <button onClick={handleDownload} className="flex h-9 w-9 items-center justify-center rounded-lg bg-black/60 text-white backdrop-blur-md transition-colors hover:bg-black/80 hover:text-nova-accent" title="Download (MP4)">
+            <button onClick={handleDownload} className="flex h-9 w-9 items-center justify-center rounded-lg bg-black/60 text-gray-900 dark:text-white backdrop-blur-md transition-colors hover:bg-black/80 hover:text-nova-accent" title="Download (MP4)">
               <Download size={18} />
             </button>
           </div>
@@ -180,16 +180,16 @@ export function VideoViewer({ src, alt }: { src: string; alt: string }) {
             <div className="flex flex-col items-center gap-4 backdrop-blur-md bg-black/60 px-6 py-5 rounded-2xl border border-white/10 shadow-2xl">
               <Loader2 size={40} className="animate-spin text-nova-accent" />
               <div className="flex flex-col items-center">
-                 <span className="text-sm font-semibold text-white drop-shadow-md">Rendering 30s Video...</span>
-                 <span className="text-xs text-gray-400 mt-1 font-mono">allocating GPU resources</span>
+                 <span className="text-sm font-semibold text-gray-900 dark:text-white drop-shadow-md">Rendering 30s Video...</span>
+                 <span className="text-xs text-gray-600 dark:text-gray-400 mt-1 font-mono">allocating GPU resources</span>
               </div>
             </div>
           ) : status !== 'playing' ? (
-            <div className="flex h-20 w-20 items-center justify-center rounded-full bg-nova-accent/90 text-white shadow-xl backdrop-blur-md transition-transform hover:scale-110">
+            <div className="flex h-20 w-20 items-center justify-center rounded-full bg-nova-accent/90 text-gray-900 dark:text-white shadow-xl backdrop-blur-md transition-transform hover:scale-110">
               <Play size={32} className="ml-[4px]" fill="currentColor" />
             </div>
           ) : (
-            <div className="opacity-0 group-hover:opacity-100 flex h-20 w-20 items-center justify-center rounded-full bg-black/60 text-white shadow-xl backdrop-blur-md transition-all hover:scale-110 hover:bg-nova-accent/90">
+            <div className="opacity-0 group-hover:opacity-100 flex h-20 w-20 items-center justify-center rounded-full bg-black/60 text-gray-900 dark:text-white shadow-xl backdrop-blur-md transition-all hover:scale-110 hover:bg-nova-accent/90">
               <Pause size={32} fill="currentColor" />
             </div>
           )}
@@ -216,14 +216,14 @@ export function VideoViewer({ src, alt }: { src: string; alt: string }) {
                    <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full shadow-md scale-0 group-hover:scale-100 transition-transform"></div>
                 </div>
               </div>
-              <div className="text-xs font-semibold text-white font-mono min-w-[36px] text-right drop-shadow-md">
+              <div className="text-xs font-semibold text-gray-900 dark:text-white font-mono min-w-[36px] text-right drop-shadow-md">
                 0:{Math.floor((progress / 100) * 30).toString().padStart(2, '0')}
               </div>
             </div>
           )}
         </div>
         
-        <div className="absolute top-4 left-4 rounded bg-black/60 px-2.5 py-1 text-xs font-semibold tracking-wide text-white backdrop-blur-md flex items-center gap-1.5">
+        <div className="absolute top-4 left-4 rounded bg-black/60 px-2.5 py-1 text-xs font-semibold tracking-wide text-gray-900 dark:text-white backdrop-blur-md flex items-center gap-1.5">
           {status === 'rendering' ? (
              <><div className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></div>Offline Render</>
           ) : (
@@ -235,7 +235,7 @@ export function VideoViewer({ src, alt }: { src: string; alt: string }) {
       {/* Fullscreen Viewer */}
       {isFullscreen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black backdrop-blur-xl" onClick={() => setIsFullscreen(false)}>
-          <button className="absolute top-6 right-6 rounded-full bg-white/10 p-2.5 text-white hover:bg-white/20 hover:text-nova-accent transition-colors z-20" onClick={() => setIsFullscreen(false)}>
+          <button className="absolute top-6 right-6 rounded-full bg-white/10 p-2.5 text-gray-900 dark:text-white hover:bg-white/20 hover:text-nova-accent transition-colors z-20" onClick={() => setIsFullscreen(false)}>
             <X size={24} />
           </button>
           <div className="relative w-full max-w-[90vw] max-h-[90vh] aspect-video group" onClick={e => e.stopPropagation()}>
@@ -250,11 +250,11 @@ export function VideoViewer({ src, alt }: { src: string; alt: string }) {
                   <Loader2 size={48} className="animate-spin text-nova-accent" />
                 </div>
               ) : status !== 'playing' ? (
-                <div className="flex h-24 w-24 items-center justify-center rounded-full bg-nova-accent/90 text-white shadow-2xl backdrop-blur-md transition-transform hover:scale-110">
+                <div className="flex h-24 w-24 items-center justify-center rounded-full bg-nova-accent/90 text-gray-900 dark:text-white shadow-2xl backdrop-blur-md transition-transform hover:scale-110">
                   <Play size={40} className="ml-[6px]" fill="currentColor" />
                 </div>
               ) : (
-                <div className="opacity-0 group-hover:opacity-100 flex h-24 w-24 items-center justify-center rounded-full bg-black/60 text-white shadow-2xl backdrop-blur-md transition-transform hover:scale-110 hover:bg-nova-accent/90">
+                <div className="opacity-0 group-hover:opacity-100 flex h-24 w-24 items-center justify-center rounded-full bg-black/60 text-gray-900 dark:text-white shadow-2xl backdrop-blur-md transition-transform hover:scale-110 hover:bg-nova-accent/90">
                   <Pause size={40} fill="currentColor" />
                 </div>
               )}
@@ -262,7 +262,7 @@ export function VideoViewer({ src, alt }: { src: string; alt: string }) {
             {status !== 'rendering' && (
               <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 to-transparent p-6 pt-20 translate-y-2 opacity-0 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300">
                 <div className="flex items-center gap-6">
-                  <button onClick={togglePlay} className="text-white hover:text-nova-accent transition-colors">
+                  <button onClick={togglePlay} className="text-gray-900 dark:text-white hover:text-nova-accent transition-colors">
                     {status === 'playing' ? <Pause size={28} fill="currentColor" /> : <Play size={28} fill="currentColor" />}
                   </button>
                   <div className="h-2 flex-1 overflow-hidden rounded-full bg-white/30 cursor-pointer hover:h-2.5 transition-all" onClick={(e) => {
@@ -274,7 +274,7 @@ export function VideoViewer({ src, alt }: { src: string; alt: string }) {
                       <div className="absolute right-0 top-1/2 -translate-y-1/2 w-4 h-4 bg-white rounded-full shadow-md"></div>
                     </div>
                   </div>
-                  <div className="text-sm font-semibold text-white font-mono min-w-[40px] text-right drop-shadow-md">
+                  <div className="text-sm font-semibold text-gray-900 dark:text-white font-mono min-w-[40px] text-right drop-shadow-md">
                     0:{Math.floor((progress / 100) * 30).toString().padStart(2, '0')}
                   </div>
                 </div>
