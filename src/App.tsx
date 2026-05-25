@@ -151,6 +151,8 @@ export default function App() {
     if ((!currentInput.trim() && !selectedFile) || isLoading) return;
 
     let contentStr = currentInput.trim();
+    let imageDataUrl: string | undefined = undefined;
+
     if (selectedFile) {
        if (selectedFile.type === 'application/pdf') {
          setIsLoading(true);
@@ -173,6 +175,18 @@ export default function App() {
            console.error("Failed to extract PDF", e);
            contentStr = `[Attached PDF: ${selectedFile.name} (failed to read context)]\n` + contentStr;
          }
+       } else if (selectedFile.type.startsWith('image/')) {
+         setIsLoading(true);
+         try {
+           const arrayBuffer = await selectedFile.arrayBuffer();
+           const fileType = selectedFile.type;
+           const base64 = btoa(new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), ''));
+           imageDataUrl = `data:${fileType};base64,${base64}`;
+           contentStr = `[Attached Image: ${selectedFile.name}]\n` + contentStr;
+         } catch (e) {
+           console.error("Failed to read image", e);
+           contentStr = `[Attached Image: ${selectedFile.name} (failed to read context)]\n` + contentStr;
+         }
        } else {
          contentStr = `[Attached: ${selectedFile.name}]\n` + contentStr;
        }
@@ -183,7 +197,9 @@ export default function App() {
       role: 'user',
       content: contentStr,
       timestamp: new Date(),
+      ...(imageDataUrl && { image: imageDataUrl })
     };
+
 
     setMessages((prev) => [...prev, userMsg]);
     setInput('');
@@ -245,7 +261,8 @@ export default function App() {
         body: JSON.stringify({
           messages: [...messages, userMsg].map((m) => ({
             role: m.role,
-            content: m.content
+            content: m.content,
+            ...(m.image && { image: m.image })
           })),
           mode: apiMode,
           networkMode
@@ -341,7 +358,8 @@ export default function App() {
         body: JSON.stringify({
           messages: messagesToKeep.map((m) => ({
             role: m.role,
-            content: m.content
+            content: m.content,
+            ...(m.image && { image: m.image })
           })),
           mode: apiMode,
           networkMode
@@ -892,12 +910,28 @@ export default function App() {
                         <button
                           type="button"
                           onClick={() => {
-                            fileInputRef.current?.click();
+                            if (fileInputRef.current) {
+                              fileInputRef.current.accept = "*/*";
+                              fileInputRef.current.click();
+                            }
                             setShowAttachMenu(false);
                           }}
                           className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:bg-nova-dark hover:text-gray-900 dark:text-white transition-colors"
                         >
                           <Paperclip size={16} /> Device File
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (fileInputRef.current) {
+                              fileInputRef.current.accept = "image/*";
+                              fileInputRef.current.click();
+                            }
+                            setShowAttachMenu(false);
+                          }}
+                          className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:bg-nova-dark hover:text-gray-900 dark:text-white transition-colors"
+                        >
+                          <ImageIcon size={16} /> Upload Image
                         </button>
                         <button
                           type="button"

@@ -158,6 +158,11 @@ export function ChatMessage({ message, onEdit }: ChatMessageProps) {
             </div>
           ) : (
             <div className="prose prose-invert max-w-none text-gray-700 dark:text-gray-300">
+              {message.image && (
+                <div className="mb-4">
+                  <ImageViewer src={message.image} alt="User Uploaded Image" />
+                </div>
+              )}
               <Markdown
                 urlTransform={(value: string) => value}
                 components={{

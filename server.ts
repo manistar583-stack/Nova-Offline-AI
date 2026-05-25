@@ -19,10 +19,14 @@ Whenever the user asks you to build a UI widget, a game, a dashboard, a web app,
 You MUST include all CSS (use Tailwind via CDN) and JavaScript inline inside the HTML.
 The system will automatically extract this block and render it as an interactive "Artifact" preview directly in the chat, exactly like Claude! Do not just provide snippets, provide a full renderable document.
 
+IMAGE GENERATION INSTRUCTION:
+If the user asks to generate an image (or if they upload an image and ask you to modify/generate based on it), you MUST generate a high-quality, descriptive prompt for the image, and then output a markdown image tag using the Pollinations AI URL format:
+![Image Focus](https://image.pollinations.ai/prompt/{URL_ENCODED_DETAILED_PROMPT}?width=1080&height=1080&nologo=true&enhance=true)
+Make sure {URL_ENCODED_DETAILED_PROMPT} is a highly detailed, descriptive visual prompt of the image based on the user's request, completely URL-encoded. You can analyze uploaded images and write detailed prompts to recreate or modify them!
+
 Strengths:
 - Reasoning, coding, writing, studying, productivity
 - Creative tasks and idea generation
-- When user wants an image, first give a beautiful description, then generate it
 
 Rules:
 - Always try your best even on limited hardware
@@ -95,10 +99,6 @@ ${mode === 'deep-research' ? 'NOTE: You are in "DeepSearch AI" mode. You are con
         }
       }
 
-      // Check if user wants an image
-      const imageRegex = /(?:(?:generate|create|make|draw|show|provide)\b.*?\b(?:image|picture|photo|pic|drawing|illustration|render|art)\b)|\b(?:image|picture|photo|pic|drawing|illustration|render|art)\b.*?\b(?:of|about|showing|depicting)\b|\b(?:draw|paint|sketch)\b/i;
-      const isImageRequest = imageRegex.test(lastMessage) && !isVideoRequest;
-
       if (isVideoRequest) {
         const cleanPrompt = lastMessage.replace(/[\r\n]/g, ' ').trim();
         const encodedPrompt = encodeURIComponent(cleanPrompt);
@@ -144,33 +144,36 @@ curl -X POST http://127.0.0.1:8188/prompt -H "Content-Type: application/json" -d
         });
       }
 
-      if (isImageRequest) {
-        // Build image generation response using Pollinations.ai with enhancement for accuracy
-        const cleanPrompt = lastMessage.replace(/[\r\n]/g, ' ').trim();
-        // Add descriptive style modifiers to improve visual fidelity
-        const enhancedPrompt = `${cleanPrompt}, high-quality, photorealistic, 8k resolution, detailed, masterpiece`;
-        const encodedPrompt = encodeURIComponent(enhancedPrompt);
-        const seed = Math.floor(Math.random() * 1000000);
-        // Using flux or simply having enhance=true helps generate higher quality, accurate images
-        const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1080&height=1080&nologo=true&enhance=true&seed=${seed}`;
-        
-        return res.json({
-          response: `🎨 Got it! I am generating a high-quality, accurately detailed image for you...\n\n![Generated Image](${imageUrl})`,
-        });
-      }
-
       // Formatting previous messages for the model
       // Gemini expects format: { role: "user" | "model", parts: [{ text: "..." }] }
-      const history = messages.slice(0, -1).map((msg: any) => ({
-        role: msg.role === "assistant" ? "model" : "user",
-        parts: [{ text: msg.content }]
-      }));
+      const formatMsg = (msg: any) => {
+        const parts: any[] = [{ text: msg.content }];
+        if (msg.image) {
+          // extract base64 and mime type from data URL
+          // data:image/jpeg;base64,...
+          const matches = msg.image.match(/^data:(image\/\w+);base64,(.+)$/);
+          if (matches) {
+            parts.push({
+              inlineData: {
+                mimeType: matches[1],
+                data: matches[2]
+              }
+            });
+          }
+        }
+        return {
+          role: msg.role === "assistant" ? "model" : "user",
+          parts
+        };
+      };
+
+      const history = messages.slice(0, -1).map(formatMsg);
 
       const chatResponse = await ai.models.generateContent({
         model: "gemini-2.5-flash",
         contents: [
           ...history,
-          { role: "user", parts: [{ text: lastMessage }] }
+          formatMsg(messages[messages.length - 1])
         ],
         config: {
           systemInstruction: dynamicPrompt,
