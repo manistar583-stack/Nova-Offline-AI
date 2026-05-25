@@ -3,6 +3,7 @@ import Markdown from 'react-markdown';
 import { User, Sparkles, Code2, Play } from 'lucide-react';
 import { Message } from '../types';
 import { ImageViewer, VideoViewer } from './MediaViewer';
+import { CustomAudioPlayer } from './CustomAudioPlayer';
 
 function CodeBlock({ node, inline, className, children, ...props }: any) {
   const match = /language-(\w+)/.exec(className || '');
@@ -84,13 +85,23 @@ export function ChatMessage({ message }: ChatMessageProps) {
           </div>
           <div className="prose prose-invert max-w-none text-gray-300">
             <Markdown
+              urlTransform={(value: string) => value}
               components={{
                 code: CodeBlock,
                 img: ({ node, ...props }) => {
+                  if (!props.src || props.src.trim() === '') return null;
                   if (props.alt === 'video-frame') {
-                    return <VideoViewer src={props.src!} alt={props.alt!} />;
+                    return <VideoViewer src={props.src} alt={props.alt!} />;
                   }
-                  return <ImageViewer src={props.src!} alt={props.alt || "Generated Output"} />;
+                  return <ImageViewer src={props.src} alt={props.alt || "Generated Output"} />;
+                },
+                a: ({ node, ...props }) => {
+                  if (props.title === 'audio' || (props.href && props.href.startsWith('data:audio/'))) {
+                    if (!props.href || props.href.trim() === '') return null;
+                    return <CustomAudioPlayer src={props.href} />;
+                  }
+                  if (!props.href || props.href.trim() === '') return <span {...props} />;
+                  return <a href={props.href} target="_blank" rel="noopener noreferrer" className="text-nova-accent hover:underline" {...props} />;
                 },
                 p: ({ node, ...props }) => <span className="block mb-4 last:mb-0" {...props} />,
               }}

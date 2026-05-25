@@ -8,6 +8,11 @@
   --color-nova-dark: #0f1115;
   --color-nova-surface: #181b21;
   --color-nova-accent: #6366f1;
+  --animate-waveform: waveform 1s ease-in-out infinite;
+  @keyframes waveform {
+    0%, 100% { height: 4px; }
+    50% { height: 24px; }
+  }
 }
 
 body {

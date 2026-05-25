@@ -37,16 +37,63 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  app.use(express.json());
+  app.use(express.json({ limit: '50mb' }));
 
   // API route for chat completion
   app.post("/api/chat", async (req, res) => {
     try {
       const { messages, mode, networkMode } = req.body;
       const lastMessage = messages[messages.length - 1].content;
+      
+      const dynamicPrompt = systemPrompt + `
+${networkMode === 'offline' ? 'NOTE: You are currently functioning in Offline Mode. Provide responses based strictly on your pre-trained knowledge without relying on external web references.' : ''}
+${mode === 'thinking' ? 'NOTE: You are in "Deep Thought" mode. Take extra time to outline your logical reasoning step-by-step and verify facts before providing the final answer.' : ''}
+${mode === 'deep-research' ? 'NOTE: You are in "DeepSearch AI" mode. You are connected to Google Search. Format your responses with high citation accuracy, comprehensively synthesizing multiple sources, providing links where necessary, and acting as a world-class research engine.' : ''}`;
 
       const videoRegex = /(?:(?:generate|create|make|show|provide)\b.*?\b(?:video|clip|animation|movie)\b)/i;
       const isVideoRequest = videoRegex.test(lastMessage);
+
+      const audioRegex = /(?:(?:generate|create|make|provide)\b.*?\b(?:audio|voice|speech|sound)\b)/i;
+      const isAudioRequest = audioRegex.test(lastMessage) && !isVideoRequest;
+
+      if (isAudioRequest) {
+        const textToSpeak = lastMessage.replace(/^(?:Generate audio of\s*)+/i, '').trim() || "Please provide some text to convert to speech.";
+        
+        try {
+          // Import here to avoid top-level issues if any
+          const googleTTS = await import('google-tts-api');
+          
+          let dataUrl = '';
+          
+          if (textToSpeak.length > 200) {
+            const results = await googleTTS.getAllAudioBase64(textToSpeak, {
+              lang: 'en',
+              slow: false,
+              host: 'https://translate.google.com',
+              splitPunct: ',.?',
+            });
+            const buffers = results.map(r => Buffer.from(r.base64, 'base64'));
+            const combined = Buffer.concat(buffers);
+            dataUrl = `data:audio/mp3;base64,${combined.toString('base64')}`;
+          } else {
+            const base64 = await googleTTS.getAudioBase64(textToSpeak, {
+              lang: 'en',
+              slow: false,
+              host: 'https://translate.google.com',
+            });
+            dataUrl = `data:audio/mp3;base64,${base64}`;
+          }
+          
+          return res.json({
+            response: `🔊 Generated audio:\n\n[generated_audio](${dataUrl} "audio")`
+          });
+        } catch(err: any) {
+          console.error("Audio generation error:", err);
+          return res.json({
+            response: `❌ Failed to generate audio: ${err.message}`
+          });
+        }
+      }
 
       // Check if user wants an image
       const imageRegex = /(?:(?:generate|create|make|draw|show|provide)\b.*?\b(?:image|picture|photo|pic|drawing|illustration|render|art)\b)|\b(?:image|picture|photo|pic|drawing|illustration|render|art)\b.*?\b(?:of|about|showing|depicting)\b|\b(?:draw|paint|sketch)\b/i;
@@ -100,7 +147,9 @@ curl -X POST http://127.0.0.1:8188/prompt -H "Content-Type: application/json" -d
       if (isImageRequest) {
         // Build image generation response using Pollinations.ai with enhancement for accuracy
         const cleanPrompt = lastMessage.replace(/[\r\n]/g, ' ').trim();
-        const encodedPrompt = encodeURIComponent(cleanPrompt);
+        // Add descriptive style modifiers to improve visual fidelity
+        const enhancedPrompt = `${cleanPrompt}, high-quality, photorealistic, 8k resolution, detailed, masterpiece`;
+        const encodedPrompt = encodeURIComponent(enhancedPrompt);
         const seed = Math.floor(Math.random() * 1000000);
         // Using flux or simply having enhance=true helps generate higher quality, accurate images
         const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1080&height=1080&nologo=true&enhance=true&seed=${seed}`;
@@ -124,8 +173,9 @@ curl -X POST http://127.0.0.1:8188/prompt -H "Content-Type: application/json" -d
           { role: "user", parts: [{ text: lastMessage }] }
         ],
         config: {
-          systemInstruction: systemPrompt + (mode === 'thinking' ? '\n\nIMPORTANT: Use profound, deep thinking for this prompt. Break down your reasoning thoroughly.' : mode === 'deep-research' ? '\n\nIMPORTANT: Conduct deep comprehensive research-level analysis and provide a thorough, structured report.' : ''),
+          systemInstruction: dynamicPrompt,
           temperature: mode === 'fast' ? 0.7 : 0.4,
+          tools: mode === 'deep-research' ? [{ googleSearch: {} }] : undefined
         }
       });
 

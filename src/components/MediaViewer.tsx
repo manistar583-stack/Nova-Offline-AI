@@ -3,6 +3,8 @@ import { Play, Pause, Loader2, Maximize, Share2, Download, X } from 'lucide-reac
 
 export function ImageViewer({ src, alt }: { src: string; alt: string }) {
   const [isFullscreen, setIsFullscreen] = useState(false);
+  
+  if (!src || src.trim() === '') return null;
 
   const handleDownload = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -73,6 +75,8 @@ export function VideoViewer({ src, alt }: { src: string; alt: string }) {
   const [progress, setProgress] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+
+  if (!src || src.trim() === '') return null;
 
   useEffect(() => {
     // Simulate initial rendering time

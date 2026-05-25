@@ -1,0 +1,36 @@
+{
+  "entities": {
+    "chat": {
+      "title": "Chat",
+      "description": "A conversation instance containing messages.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "title"]
+    },
+    "message": {
+      "title": "Message",
+      "description": "An individual message within a chat.",
+      "type": "object",
+      "properties": {
+        "role": { "type": "string", "enum": ["user", "assistant"] },
+        "content": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["role", "content"]
+    }
+  },
+  "firestore": {
+    "/chats/{chatId}": {
+      "schema": "chat",
+      "description": "Stores user chat histories."
+    },
+    "/chats/{chatId}/messages/{messageId}": {
+      "schema": "message",
+      "description": "Stores messages inside a specific chat."
+    }
+  }
+}
