@@ -46,13 +46,13 @@ async function startServer() {
   // API route for chat completion
   app.post("/api/chat", async (req, res) => {
     try {
-      const { messages, mode, networkMode } = req.body;
+      const { messages, mode, networkMode, modelName = "gemini-2.5-flash", searchEngine = "google" } = req.body;
       const lastMessage = messages[messages.length - 1].content;
       
       const dynamicPrompt = systemPrompt + `
 ${networkMode === 'offline' ? 'NOTE: You are currently functioning in Offline Mode. Provide responses based strictly on your pre-trained knowledge without relying on external web references.' : ''}
 ${mode === 'thinking' ? 'NOTE: You are in "Deep Thought" mode. Take extra time to outline your logical reasoning step-by-step and verify facts before providing the final answer.' : ''}
-${mode === 'deep-research' ? 'NOTE: You are in "DeepSearch AI" mode. You are connected to Google Search. Format your responses with high citation accuracy, comprehensively synthesizing multiple sources, providing links where necessary, and acting as a world-class research engine.' : ''}`;
+${mode === 'deep-research' ? `NOTE: You are in "DeepSearch AI" mode. You are searching using the ${searchEngine} search engine. Format your responses with high citation accuracy, comprehensively synthesizing multiple sources, providing links where necessary, and acting as a world-class research engine.` : ''}`;
 
       const videoRegex = /(?:(?:generate|create|make|show|provide)\b.*?\b(?:video|clip|animation|movie)\b)/i;
       const isVideoRequest = videoRegex.test(lastMessage);
@@ -170,7 +170,7 @@ curl -X POST http://127.0.0.1:8188/prompt -H "Content-Type: application/json" -d
       const history = messages.slice(0, -1).map(formatMsg);
 
       const chatResponse = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
+        model: modelName,
         contents: [
           ...history,
           formatMsg(messages[messages.length - 1])
@@ -208,6 +208,29 @@ curl -X POST http://127.0.0.1:8188/prompt -H "Content-Type: application/json" -d
     } catch (error) {
       console.error("Error generating title:", error);
       res.status(500).json({ title: "New Chat" });
+    }
+  });
+
+  // API route for chat summarization
+  app.post("/api/summarize", async (req, res) => {
+    try {
+      const { messages } = req.body;
+      const history = messages.map((m: any) => `${m.role.toUpperCase()}: ${m.content}`).join('\n\n');
+      const summarizePrompt = `Provide a very concise, high-level summary (1-3 sentences) of the following conversation:\n\n${history}`;
+      
+      const chatResponse = await ai.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: [
+          { role: "user", parts: [{ text: summarizePrompt }] }
+        ],
+        config: {
+          temperature: 0.3,
+        }
+      });
+      res.json({ summary: chatResponse.text?.trim() || "No summary available." });
+    } catch (error) {
+      console.error("Error generating summary:", error);
+      res.status(500).json({ error: "Failed to generate summary" });
     }
   });
 

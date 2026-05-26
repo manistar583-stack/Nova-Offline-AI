@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Markdown from 'react-markdown';
 import { User, Sparkles, Code2, Play, Pencil, X as XIcon, Check, Copy } from 'lucide-react';
 import { motion } from 'motion/react';
@@ -19,15 +19,125 @@ function CodeBlock({ node, inline, className, children, ...props }: any) {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  if (!inline && match && (language === 'html' || language === 'svg' || language === 'xml' || language === 'react')) {
+  const isVisualPreview = language === 'html' || language === 'svg' || language === 'xml' || language === 'react';
+  const isRunnable = language === 'python' || language === 'py' || language === 'javascript' || language === 'js' || language === 'ts' || language === 'typescript';
+
+  const getRunnerDoc = (lang: string, code: string) => {
+    if (lang === 'python' || lang === 'py') {
+      return `
+<!DOCTYPE html>
+<html>
+<head>
+  <script src="https://cdn.jsdelivr.net/pyodide/v0.25.0/full/pyodide.js"></script>
+  <style>
+    body { background: #1e1e1e; color: #d4d4d4; font-family: monospace; padding: 16px; margin: 0; }
+    pre { white-space: pre-wrap; word-wrap: break-word; margin: 0; }
+    .error { color: #f48771; }
+    .system { color: #569cd6; }
+  </style>
+</head>
+<body>
+  <pre id="output"><span class="system">Loading Python environment (Pyodide)...</span>\n</pre>
+  <script>
+    const output = document.getElementById('output');
+    const log = (msg, isError = false) => {
+      const span = document.createElement('span');
+      if(isError) span.className = 'error';
+      span.innerText = msg + '\\n';
+      output.appendChild(span);
+    };
+    
+    async function main() {
+      try {
+        let pyodide = await loadPyodide();
+        const code = ${JSON.stringify(code)};
+        
+        output.innerHTML += '<span class="system">Loading required packages...</span>\\n';
+        await pyodide.loadPackagesFromImports(code);
+        
+        output.innerHTML = '<span class="system">Runtime Ready.</span>\\n<span class="system">---</span>\\n';
+        
+        pyodide.setStdout({ batched: (str) => log(str) });
+        pyodide.setStderr({ batched: (str) => log(str, true) });
+        
+        await pyodide.runPythonAsync(code);
+      } catch (err) {
+        log(err.toString(), true);
+      }
+    }
+    main();
+  </script>
+</body>
+</html>`;
+    }
+    
+    if (lang === 'javascript' || lang === 'js' || lang === 'ts' || lang === 'typescript') {
+      // Remove typescript type annotations via simple regex for preview
+      const jsCode = (lang === 'ts' || lang === 'typescript') ? 
+        code.replace(/:\\s*[A-Z][a-zA-Z0-9_]*\\b/g, '') // Basic heuristic
+        : code;
+        
+      return `
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { background: #1e1e1e; color: #d4d4d4; font-family: monospace; padding: 16px; margin: 0; }
+    pre { white-space: pre-wrap; word-wrap: break-word; margin: 0; }
+    .error { color: #f48771; }
+    .system { color: #569cd6; }
+  </style>
+</head>
+<body>
+  <pre id="output"><span class="system">Executing Javascript...</span>\n<span class="system">---</span>\n</pre>
+  <script>
+    const output = document.getElementById('output');
+    const log = (msg, isError = false) => {
+      const span = document.createElement('span');
+      if(isError) span.className = 'error';
+      span.innerText = msg + '\\n';
+      output.appendChild(span);
+    };
+    const formatArg = (arg) => {
+      if (arg === null) return 'null';
+      if (arg === undefined) return 'undefined';
+      if (typeof arg === 'object') {
+        try { return JSON.stringify(arg, null, 2); } catch(e) { return String(arg); }
+      }
+      return String(arg);
+    }
+    console.log = (...args) => log(args.map(formatArg).join(' '));
+    console.error = (...args) => log(args.map(formatArg).join(' '), true);
+    console.warn = (...args) => log(args.map(formatArg).join(' '), true);
+    console.info = (...args) => log(args.map(formatArg).join(' '));
+    
+    window.onerror = (msg) => {
+      console.error(msg);
+      return false;
+    };
+  </script>
+  <script type="module">
+    try {
+      ${jsCode.replace(/<\/script>/g, '<\\/script>')}
+    } catch(e) {
+      console.error(e.toString());
+    }
+  </script>
+</body>
+</html>`;
+    }
+    return code;
+  };
+
+  if (!inline && match && (isVisualPreview || isRunnable)) {
     return (
       <div className="my-5 w-full rounded-xl overflow-hidden border border-gray-700/50 bg-nova-dark/50 ring-1 ring-white/10 shadow-xl">
         <div className="flex items-center justify-between px-3 py-2 bg-black/40 border-b border-gray-700/50">
            <div className="flex gap-2">
-             <button onClick={() => setView('preview')} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${view === 'preview' ? 'bg-nova-accent text-white shadow-md' : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-white/5'}`}>
-               <Play size={14} /> Artifact Preview
+             <button onClick={() => setView('preview')} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${view === 'preview' ? 'bg-nova-accent text-white shadow-md' : 'text-gray-400 hover:text-white hover:bg-white/10'}`}>
+               <Play size={14} /> {isRunnable ? 'Run execution' : 'Artifact Preview'}
              </button>
-             <button onClick={() => setView('code')} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${view === 'code' ? 'bg-gray-700 text-gray-900 dark:text-white shadow-md' : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-white/5'}`}>
+             <button onClick={() => setView('code')} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${view === 'code' ? 'bg-white/20 text-white shadow-md ring-1 ring-white/30' : 'text-gray-400 hover:text-white hover:bg-white/10'}`}>
                <Code2 size={14} /> Code
              </button>
            </div>
@@ -44,8 +154,8 @@ function CodeBlock({ node, inline, className, children, ...props }: any) {
                <code className={className}>{children}</code>
              </pre>
            ) : (
-             <div className="w-full bg-white relative rounded-b-xl flex-grow flex" style={{ minHeight: '400px', height: 'auto', resize: 'vertical', overflow: 'auto' }}>
-                <iframe srcDoc={codeStr} className="w-full flex-grow border-none" style={{ minHeight: '400px' }} sandbox="allow-scripts allow-forms allow-same-origin"/>
+             <div className={`w-full relative flex-grow flex rounded-b-xl overflow-hidden ${isRunnable ? 'bg-[#1e1e1e]' : 'bg-white'}`} style={{ minHeight: '400px', height: 'auto', resize: 'vertical' }}>
+                <iframe srcDoc={isRunnable ? getRunnerDoc(language, codeStr) : codeStr} className="w-full flex-grow border-none" style={{ minHeight: '400px' }} sandbox="allow-scripts allow-forms allow-same-origin"/>
              </div>
            )}
         </div>
@@ -81,6 +191,24 @@ export function ChatMessage({ message, onEdit }: ChatMessageProps) {
   const isAssistant = message.role === 'assistant';
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState(message.content);
+  
+  const [displayedContent, setDisplayedContent] = useState(message.isTyping ? '' : message.content);
+
+  useEffect(() => {
+    if (message.isTyping && displayedContent.length < message.content.length) {
+      const timeoutId = setTimeout(() => {
+        setDisplayedContent(prev => message.content.slice(0, prev.length + 3));
+      }, 10);
+      return () => clearTimeout(timeoutId);
+    } else if (message.isTyping && displayedContent.length >= message.content.length) {
+      if (message.isTyping) {
+        message.isTyping = false;
+        setDisplayedContent(message.content);
+      }
+    } else if (!message.isTyping) {
+      setDisplayedContent(message.content);
+    }
+  }, [displayedContent, message.content, message.isTyping]);
 
   const handleSave = () => {
     if (onEdit && editContent.trim() !== '' && editContent !== message.content) {
@@ -97,11 +225,13 @@ export function ChatMessage({ message, onEdit }: ChatMessageProps) {
   return (
     <motion.div
       layout
-      initial={{ opacity: 0, x: isAssistant ? -30 : 30, scale: 0.8 }}
-      animate={{ opacity: 1, x: 0, scale: 1 }}
-      transition={{ type: "spring", stiffness: 350, damping: 25 }}
+      initial={{ opacity: 0, y: 30, scale: 0.98 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ type: "spring", stiffness: 400, damping: 30 }}
       className={`flex w-full px-4 py-8 sm:px-6 relative group ${
-        isAssistant ? 'bg-white dark:bg-nova-surface' : 'bg-transparent'
+        isAssistant 
+          ? 'bg-white/60 dark:bg-black/20 backdrop-blur-xl border-y border-white/40 dark:border-white/10 shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:shadow-[0_8px_30px_rgb(0,0,0,0.12)]' 
+          : 'bg-transparent'
       }`}
     >
       <div className="mx-auto flex w-full max-w-3xl gap-4 sm:gap-6">
@@ -138,12 +268,12 @@ export function ChatMessage({ message, onEdit }: ChatMessageProps) {
               <textarea
                 value={editContent}
                 onChange={(e) => setEditContent(e.target.value)}
-                className="w-full bg-nova-dark/50 text-gray-800 dark:text-gray-200 border border-gray-200 dark:border-gray-700 rounded-lg p-3 min-h-[100px] focus:outline-none focus:ring-1 focus:ring-nova-accent focus:border-nova-accent resize-y"
+                className="w-full bg-white/20 dark:bg-black/20 backdrop-blur-md text-gray-800 dark:text-gray-200 border border-black/10 dark:border-white/10 rounded-lg p-3 min-h-[100px] focus:outline-none focus:ring-1 focus:ring-nova-accent focus:border-nova-accent resize-y"
               />
               <div className="flex justify-end gap-2">
                 <button
                   onClick={handleCancel}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-700 transition-colors"
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg bg-black/5 dark:bg-white/10 text-gray-700 dark:text-gray-300 hover:bg-black/10 dark:hover:bg-white/20 transition-colors"
                 >
                   <XIcon size={14} /> Cancel
                 </button>
@@ -185,7 +315,7 @@ export function ChatMessage({ message, onEdit }: ChatMessageProps) {
                   p: ({ node, ...props }) => <span className="block mb-4 last:mb-0" {...props} />,
                 }}
               >
-                {message.content}
+                {displayedContent + (message.isTyping ? ' ▋' : '')}
               </Markdown>
             </div>
           )}

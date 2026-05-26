@@ -4,4 +4,5 @@ export interface Message {
   content: string;
   timestamp: Date;
   image?: string; // base64 encoded image data url
+  isTyping?: boolean;
 }

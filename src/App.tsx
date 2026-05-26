@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Loader2, Image as ImageIcon, Paperclip, Zap, BrainCircuit, Microscope, X, Video, Wifi, WifiOff, Plus, Menu, LogOut, Github, Chrome, FileClock, Webhook, Mic, MicOff, Volume2, Cloud, Table, ArrowDownToLine, ArrowDown, Search, Sun, Moon, Settings, MessageSquareHeart, Flag, FileText, Code2, Sparkles, AlignLeft } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import { Send, Loader2, Image as ImageIcon, Paperclip, Zap, BrainCircuit, Microscope, X, Video, Wifi, WifiOff, Plus, Menu, LogOut, Github, Chrome, FileClock, Webhook, Mic, MicOff, Volume2, Cloud, Table, ArrowDownToLine, ArrowDown, Search, Sun, Moon, Settings, MessageSquareHeart, Flag, FileText, Code2, Sparkles, AlignLeft, Trash2, Bold, Italic, List, Code, Globe, ShieldCheck, Smartphone, Key } from 'lucide-react';
 import * as pdfjsLib from 'pdfjs-dist';
 // @ts-ignore
 import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
@@ -8,6 +9,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
 
 import { Message } from './types';
 import { ChatMessage } from './components/ChatMessage';
+import { ThinkingAnimation } from './components/ThinkingAnimation';
 import { auth, loginWithGoogle, loginWithGithub, logout, db, getAccessToken, OperationType, handleFirestoreError } from './lib/firebase';
 import firebaseConfig from '../firebase-applet-config.json';
 import { onAuthStateChanged, User } from 'firebase/auth';
@@ -24,10 +26,20 @@ export default function App() {
   ]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [selectionMenu, setSelectionMenu] = useState<{x: number, y: number, text: string} | null>(null);
+  const [summary, setSummary] = useState<string | null>(null);
+  const [isSummarizing, setIsSummarizing] = useState(false);
   const [mode, setMode] = useState<'fast' | 'thinking' | 'deep-research'>('fast');
+  const [selectedModel, setSelectedModel] = useState("gemini-2.5-flash");
+  const [searchEngine, setSearchEngine] = useState("google");
   const [networkMode, setNetworkMode] = useState<'online' | 'offline'>('online');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   
+  const [freeMessageCount, setFreeMessageCount] = useState(() => {
+    const stored = localStorage.getItem('nova_free_messages');
+    return stored ? parseInt(stored, 10) : 0;
+  });
+
   const [user, setUser] = useState<User | null>(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
@@ -51,7 +63,70 @@ export default function App() {
   
   const bottomRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const recognitionRef = useRef<any>(null);
+
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 208)}px`; // 208px is approx max-h-52
+    }
+  }, [input]);
+
+  useEffect(() => {
+    const handleMouseUp = (e: MouseEvent) => {
+      if ((e.target as HTMLElement).closest('#selection-menu')) {
+        return;
+      }
+      setTimeout(() => {
+        const selection = window.getSelection();
+        const text = selection?.toString().trim();
+        if (text && text.length > 0) {
+          try {
+            const range = selection.getRangeAt(0);
+            const rect = range.getBoundingClientRect();
+            setSelectionMenu({
+              x: rect.left + (rect.width / 2),
+              y: rect.top,
+              text
+            });
+          } catch (e) {
+            setSelectionMenu(null);
+          }
+        } else {
+          setSelectionMenu(null);
+        }
+      }, 10);
+    };
+
+    document.addEventListener('mouseup', handleMouseUp);
+    return () => document.removeEventListener('mouseup', handleMouseUp);
+  }, []);
+
+  const insertFormatting = (prefix: string, suffix: string) => {
+    if (!textareaRef.current) return;
+    const start = textareaRef.current.selectionStart;
+    const end = textareaRef.current.selectionEnd;
+    const text = input;
+    const before = text.substring(0, start);
+    const selected = text.substring(start, end);
+    const after = text.substring(end);
+    
+    const textToWrap = selected || (prefix === '```\n' ? 'code' : (prefix === '- ' ? 'list item' : 'text'));
+    const newText = `${before}${prefix}${textToWrap}${suffix}${after}`;
+    
+    setInput(newText);
+    
+    setTimeout(() => {
+      if (textareaRef.current) {
+        textareaRef.current.focus();
+        textareaRef.current.setSelectionRange(
+          start + prefix.length,
+          start + prefix.length + textToWrap.length
+        );
+      }
+    }, 0);
+  };
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -147,8 +222,19 @@ export default function App() {
 
   const handleSubmit = async (e?: React.FormEvent, promptOverride?: string) => {
     if (e) e.preventDefault();
+    if (!user && freeMessageCount >= 3) {
+      setShowAuthModal(true);
+      return;
+    }
+
     const currentInput = promptOverride ?? input;
     if ((!currentInput.trim() && !selectedFile) || isLoading) return;
+
+    if (!user) {
+      const newCount = freeMessageCount + 1;
+      setFreeMessageCount(newCount);
+      localStorage.setItem('nova_free_messages', newCount.toString());
+    }
 
     let contentStr = currentInput.trim();
     let imageDataUrl: string | undefined = undefined;
@@ -265,6 +351,8 @@ export default function App() {
             ...(m.image && { image: m.image })
           })),
           mode: apiMode,
+          modelName: selectedModel,
+          searchEngine,
           networkMode
         })
       });
@@ -280,6 +368,7 @@ export default function App() {
         role: 'assistant',
         content: data.response,
         timestamp: new Date(),
+        isTyping: true
       };
       
       setMessages((prev) => [...prev, assistantMsg]);
@@ -362,6 +451,8 @@ export default function App() {
             ...(m.image && { image: m.image })
           })),
           mode: apiMode,
+          modelName: selectedModel,
+          searchEngine,
           networkMode
         })
       });
@@ -377,6 +468,7 @@ export default function App() {
         role: 'assistant',
         content: data.response,
         timestamp: new Date(),
+        isTyping: true
       };
       
       setMessages((prev) => [...prev, assistantMsg]);
@@ -416,7 +508,25 @@ export default function App() {
     }
   };
 
+  const generateSummary = async () => {
+    setIsSummarizing(true);
+    try {
+      const response = await fetch('/api/summarize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: messages.filter(m => m.id !== 'greeting') })
+      });
+      const data = await response.json();
+      setSummary(data.summary);
+    } catch (err) {
+      console.error("Failed to summarize chat", err);
+    } finally {
+      setIsSummarizing(false);
+    }
+  };
+
   const handleNewChat = () => {
+    setSummary(null);
     setMessages([
       {
         id: "greeting",
@@ -429,6 +539,18 @@ export default function App() {
     setSelectedFile(null);
     setCurrentChatId(null);
     if(window.innerWidth < 768) setShowSidebar(false);
+  };
+
+  const handleDeleteChat = async (e: React.MouseEvent, chatId: string) => {
+    e.stopPropagation();
+    try {
+      await deleteDoc(doc(db, 'chats', chatId));
+      if (currentChatId === chatId) {
+        handleNewChat();
+      }
+    } catch (e) {
+      console.error("Failed to delete chat", e);
+    }
   };
 
   const toggleRecording = () => {
@@ -602,7 +724,50 @@ export default function App() {
 
   return (
     <div className={theme}>
-      <div className="flex h-screen overflow-hidden bg-gray-50 dark:bg-nova-dark font-sans text-gray-800 dark:text-gray-200">
+      {selectionMenu && (
+        <div 
+          id="selection-menu"
+          className="fixed z-50 flex items-center gap-1 bg-white dark:bg-gray-800 shadow-xl border border-gray-200 dark:border-gray-700 rounded-lg p-1 -translate-x-1/2 -translate-y-full mb-2 animate-in fade-in zoom-in-95 duration-200"
+          style={{ top: selectionMenu.y - 8, left: selectionMenu.x }}
+        >
+          <button
+            onClick={() => {
+              handleSubmit(undefined, `Explain this:\n\n"${selectionMenu.text}"`);
+              setSelectionMenu(null);
+              window.getSelection()?.removeAllRanges();
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors whitespace-nowrap"
+          >
+            <Sparkles size={14} className="text-purple-500" /> Explain
+          </button>
+          <button
+            onClick={() => {
+              handleSubmit(undefined, `Summarize this:\n\n"${selectionMenu.text}"`);
+              setSelectionMenu(null);
+              window.getSelection()?.removeAllRanges();
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors whitespace-nowrap"
+          >
+            <AlignLeft size={14} className="text-emerald-500" /> Summarize
+          </button>
+          <button
+            onClick={() => {
+              handleSubmit(undefined, `Translate this:\n\n"${selectionMenu.text}"`);
+              setSelectionMenu(null);
+              window.getSelection()?.removeAllRanges();
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors whitespace-nowrap"
+          >
+            <Globe size={14} className="text-blue-500" /> Translate
+          </button>
+        </div>
+      )}
+      <div className="flex h-screen overflow-hidden bg-gray-50/50 dark:bg-nova-dark/80 font-sans text-gray-800 dark:text-gray-200 relative">
+        {/* Dynamic Background Blobs */}
+        <div className="absolute top-0 -left-4 w-72 h-72 bg-purple-300 dark:bg-purple-900 rounded-full mix-blend-multiply dark:mix-blend-screen filter blur-3xl opacity-30 dark:opacity-20 animate-blob pointer-events-none"></div>
+        <div className="absolute top-0 -right-4 w-72 h-72 bg-yellow-300 dark:bg-yellow-900 rounded-full mix-blend-multiply dark:mix-blend-screen filter blur-3xl opacity-30 dark:opacity-20 animate-blob animation-delay-2000 pointer-events-none"></div>
+        <div className="absolute -bottom-8 left-20 w-72 h-72 bg-pink-300 dark:bg-pink-900 rounded-full mix-blend-multiply dark:mix-blend-screen filter blur-3xl opacity-30 dark:opacity-20 animate-blob animation-delay-4000 pointer-events-none"></div>
+
         {/* Mobile Sidebar Overlay */}
       {showSidebar && (
         <div 
@@ -616,10 +781,10 @@ export default function App() {
       )}
 
       {/* Sidebar for Chat History */}
-      <div className={`fixed inset-y-0 left-0 z-50 transform bg-white dark:bg-nova-surface transition-all duration-300 ease-in-out md:relative md:z-0 flex-shrink-0 flex flex-col 
-        ${showSidebar ? 'translate-x-0 w-64 border-r border-gray-300 dark:border-gray-800' : '-translate-x-full w-64 md:w-0 md:border-none md:overflow-hidden overflow-hidden'}`}>
+      <div className={`fixed inset-y-0 left-0 z-50 transform bg-white/70 dark:bg-nova-surface/60 backdrop-blur-2xl border-r border-white/40 dark:border-white/10 shadow-[8px_0_30px_rgb(0,0,0,0.05)] transition-all duration-300 ease-in-out md:relative md:z-10 flex-shrink-0 flex flex-col 
+        ${showSidebar ? 'translate-x-0 w-64' : '-translate-x-full w-64 md:w-0 md:border-none md:overflow-hidden overflow-hidden'}`}>
         <div className="flex h-full flex-col">
-           <div className="p-4 border-b border-gray-300 dark:border-gray-800 flex items-center justify-between">
+           <div className="p-4 border-b border-gray-200/50 dark:border-gray-800/50 flex items-center justify-between">
               <span className="font-display font-bold text-gray-900 dark:text-white tracking-tight flex items-center gap-2">
                  <FileClock size={16} className="text-nova-accent"/> History
               </span>
@@ -636,9 +801,34 @@ export default function App() {
            </div>
            
            <div className="flex-1 overflow-y-auto p-2">
-              <button onClick={handleNewChat} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-900 dark:text-white bg-nova-accent/20 hover:bg-nova-accent/30 rounded-lg mb-4 transition-colors">
+              <button 
+                onClick={handleNewChat} 
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-900 dark:text-white bg-nova-accent/20 hover:bg-nova-accent/30 rounded-lg mb-2 transition-colors"
+                title="Start a new conversation"
+              >
                  <Plus size={16} /> New Chat
               </button>
+              
+              <button
+                onClick={generateSummary}
+                disabled={isSummarizing || messages.length < 2}
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-900 dark:text-white bg-gray-100 dark:bg-nova-dark border border-gray-200 dark:border-gray-800 hover:bg-gray-200 dark:hover:bg-gray-800 rounded-lg mb-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Summarize the current conversation"
+              >
+                {isSummarizing ? <Loader2 size={16} className="animate-spin" /> : <AlignLeft size={16} className="text-nova-accent" />}
+                Summarize Chat
+              </button>
+              
+              {user && messages.length > 0 && (
+                <button
+                  onClick={exportToSheets}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-900 dark:text-white bg-gray-100 dark:bg-nova-dark border border-gray-200 dark:border-gray-800 hover:bg-gray-200 dark:hover:bg-gray-800 rounded-lg mb-4 transition-colors"
+                  title="Export Chat to Google Sheets"
+                >
+                  <Table size={16} className="text-emerald-500" />
+                  Export to Sheets
+                </button>
+              )}
               
               {user && chatHistory.length > 0 && (
                 <div className="mb-4 relative">
@@ -667,13 +857,21 @@ export default function App() {
                   {chatHistory
                     .filter(chat => chat.title?.toLowerCase().includes(searchHistoryQuery.toLowerCase()))
                     .map((chat) => (
-                    <button 
-                      key={chat.id}
-                      onClick={() => loadChat(chat.id)}
-                      className={`text-left truncate px-3 py-2 text-sm rounded-lg transition-colors ${currentChatId === chat.id ? 'bg-gray-50 dark:bg-nova-dark text-nova-accent font-medium' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-white/5 hover:text-gray-800 dark:text-gray-200'}`}
-                    >
-                      {chat.title}
-                    </button>
+                    <div key={chat.id} className={`group flex items-center justify-between rounded-lg transition-colors ${currentChatId === chat.id ? 'bg-white/60 dark:bg-black/40 shadow-sm border-t border-white/40 dark:border-white/10 text-nova-accent font-medium' : 'text-gray-600 dark:text-gray-400 hover:bg-white/40 dark:hover:bg-white/10 hover:text-gray-800 dark:text-gray-200'}`}>
+                      <button 
+                        onClick={() => loadChat(chat.id)}
+                        className="flex-1 text-left truncate px-3 py-2 text-sm"
+                      >
+                        {chat.title}
+                      </button>
+                      <button
+                        onClick={(e) => handleDeleteChat(e, chat.id)}
+                        className="px-2 opacity-0 group-hover:opacity-100 text-gray-400 hover:text-rose-500 transition-all"
+                        title="Delete chat"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
                   ))}
                   {chatHistory.length === 0 && (
                     <p className="text-xs text-gray-500 text-center py-4">No recent chats.</p>
@@ -692,7 +890,11 @@ export default function App() {
                   <span className="text-xs text-gray-700 dark:text-gray-300 truncate">{user.displayName || user.email}</span>
                 </div>
                 <div className="flex items-center justify-between pt-3 border-t border-gray-200 dark:border-gray-800/50">
-                  <button onClick={handleChangeTheme} className="text-xs text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white flex items-center gap-2 transition-colors">
+                  <button 
+                    onClick={handleChangeTheme} 
+                    className="text-xs text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white flex items-center gap-2 transition-colors"
+                    title="Toggle dark/light mode"
+                  >
                      {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />} {theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
                   </button>
                   <button onClick={logout} className="text-gray-500 hover:text-rose-500 transition-colors" title="Sign Out">
@@ -705,11 +907,11 @@ export default function App() {
       </div>
       
       {/* Main Content Area */}
-      <div className="flex flex-1 flex-col h-full w-full relative">
+      <div className="flex flex-1 flex-col h-full w-full relative z-10 backdrop-blur-[2px]">
         {/* Header */}
-        <header className="flex h-16 shrink-0 items-center justify-between border-b border-gray-300 dark:border-gray-800 bg-white dark:bg-nova-surface px-4 md:px-6 shadow-sm">
+        <header className="flex h-16 shrink-0 items-center justify-between border-b border-white/20 dark:border-white/10 bg-white/40 dark:bg-black/20 backdrop-blur-md px-4 md:px-6 z-20">
           <div className="flex items-center gap-3">
-            <button className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:text-white transition-colors" onClick={() => setShowSidebar(!showSidebar)}>
+            <button className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:text-white transition-colors" onClick={() => setShowSidebar(!showSidebar)} title="Toggle Sidebar">
               <Menu size={20} />
             </button>
             <div className="flex h-8 w-8 items-center justify-center rounded-sm bg-nova-accent text-white">
@@ -726,16 +928,6 @@ export default function App() {
               {autoScroll ? <ArrowDownToLine size={14} /> : <ArrowDown size={14} />}
               <span className="hidden sm:inline">Auto-scroll</span>
             </button>
-            {user && messages.length > 0 && (
-              <button
-                onClick={exportToSheets}
-                className="flex items-center gap-2 hover:text-emerald-400 transition-colors bg-nova-dark/50 px-3 py-1.5 rounded-full border border-gray-300 dark:border-gray-800 shadow-sm"
-                title="Export Chat to Google Sheets"
-              >
-                <Table size={14} className="text-emerald-500" />
-                <span className="hidden sm:inline">Export</span>
-              </button>
-            )}
             <button 
               onClick={() => setShowSettingsModal(true)}
               className="flex items-center gap-2 hover:text-gray-800 dark:text-gray-200 transition-colors bg-nova-dark/50 px-3 py-1.5 rounded-full border border-gray-300 dark:border-gray-800 shadow-sm"
@@ -752,6 +944,7 @@ export default function App() {
             <button 
               onClick={() => setNetworkMode(prev => prev === 'online' ? 'offline' : 'online')}
               className="flex items-center gap-2 hover:text-gray-800 dark:text-gray-200 transition-colors bg-nova-dark/50 px-3 py-1.5 rounded-full border border-gray-300 dark:border-gray-800 shadow-sm"
+              title="Toggle network mode (simulate offline mode)"
             >
               {networkMode === 'online' ? <Wifi size={14} className="text-emerald-500" /> : <WifiOff size={14} className="text-amber-500" />}
               <span className="hidden sm:inline">{networkMode === 'online' ? 'Online' : 'Offline'}</span>
@@ -759,83 +952,121 @@ export default function App() {
           </div>
         </header>
 
+        {summary && (
+          <div className="bg-nova-accent/10 border-b border-nova-accent/20 px-4 py-3 flex items-start gap-4 shadow-inner relative shrink-0 z-10 transition-all">
+            <div className="flex-1 text-sm text-gray-800 dark:text-gray-200 leading-relaxed">
+              <strong className="text-nova-accent mr-2 font-semibold">Conversation Summary:</strong>
+              {summary}
+            </div>
+            <button 
+              onClick={() => setSummary(null)} 
+              className="text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 bg-white/50 dark:bg-black/50 p-1 rounded-full transition-colors shrink-0"
+              title="Dismiss summary"
+            >
+              <X size={16} />
+            </button>
+          </div>
+        )}
+
         {/* Chat Area */}
         <main className="flex-1 overflow-y-auto w-full">
-          {messages.map((msg) => (
-            <ChatMessage key={msg.id} message={msg} onEdit={handleEditMessage} />
-          ))}
-          {isLoading && (
-            <div className="flex w-full px-4 py-8 sm:px-6 bg-white dark:bg-nova-surface">
-              <div className="mx-auto flex w-full max-w-3xl gap-4 sm:gap-6 items-center">
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-sm bg-nova-accent text-white">
-                   <Loader2 size={18} className="animate-spin" />
+          <AnimatePresence initial={false}>
+            {messages.map((msg) => (
+              <ChatMessage key={msg.id} message={msg} onEdit={handleEditMessage} />
+            ))}
+            {isLoading && (
+              <motion.div 
+                key="loading-indicator"
+                initial={{ opacity: 0, y: 10, scale: 0.98 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -10, scale: 0.98 }}
+                className="flex w-full px-4 py-8 sm:px-6 relative group bg-white/60 dark:bg-black/20 backdrop-blur-xl border-y border-white/40 dark:border-white/10 shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:shadow-[0_8px_30px_rgb(0,0,0,0.12)]"
+              >
+                <div className="mx-auto flex w-full max-w-3xl gap-4 sm:gap-6 items-center pt-0">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-sm bg-nova-accent text-white shadow-sm ring-1 ring-white/20">
+                     <Sparkles size={16} />
+                  </div>
+                  <div className="flex-1 flex flex-col items-start">
+                    <div className="bg-white/40 dark:bg-black/30 backdrop-blur-md rounded-2xl px-4 py-2 border border-white/40 dark:border-white/10 shadow-sm flex items-center gap-3 w-fit">
+                      <ThinkingAnimation mode={mode} />
+                      {mode !== 'fast' && (
+                        <span className="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full bg-white/50 dark:bg-white/10 border border-white/40 dark:border-white/5 text-nova-accent font-bold">
+                          {mode === 'thinking' ? 'Deep Thought' : 'Deep Research & Search'}
+                        </span>
+                      )}
+                    </div>
+                  </div>
                 </div>
-                <div className="text-gray-600 dark:text-gray-400 text-sm font-medium animate-pulse flex items-center gap-2">
-                  Nova is thinking...
-                  {mode !== 'fast' && (
-                    <span className="text-xs px-2 py-0.5 rounded bg-gray-50 dark:bg-nova-dark border border-gray-200 dark:border-gray-700">
-                      {mode === 'thinking' ? 'Deep Thought' : 'Deep Research & Search'}
-                    </span>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
+              </motion.div>
+            )}
+          </AnimatePresence>
           <div ref={bottomRef} className="h-6" />
         </main>
 
         {/* Input Area */}
-        <footer className="shrink-0 p-3 sm:p-6 pb-6 sm:pb-8 bg-nova-dark/80 backdrop-blur-sm">
+        <footer className="shrink-0 p-3 sm:p-6 pb-6 sm:pb-8 bg-white/30 dark:bg-black/20 backdrop-blur-xl border-t border-white/20 dark:border-white/10 z-20">
           <div className="mx-auto max-w-3xl">
             {messages.length <= 1 && (
-              <div className="mb-4 grid grid-cols-2 md:grid-cols-4 gap-2">
+              <motion.div 
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ staggerChildren: 0.1, delayChildren: 0.2 }}
+                className="mb-4 grid grid-cols-2 md:grid-cols-4 gap-2"
+              >
                 {[
                   { text: 'Analyze this document', icon: <FileText size={18} className="text-blue-500" /> },
                   { text: 'Help me debug code', icon: <Code2 size={18} className="text-amber-500" /> },
                   { text: 'Write a creative story', icon: <Sparkles size={18} className="text-purple-500" /> },
                   { text: 'Summarize an article', icon: <AlignLeft size={18} className="text-emerald-500" /> },
                 ].map((prompt, index) => (
-                  <button
+                  <motion.button
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.4 }}
                     key={index}
                     onClick={() => handleSubmit(undefined, prompt.text)}
-                    className="flex flex-col items-start gap-2.5 p-3.5 text-left bg-white dark:bg-nova-surface border border-gray-200 dark:border-gray-700 rounded-xl hover:border-gray-300 dark:hover:border-gray-600 hover:shadow-sm hover:-translate-y-0.5 transition-all w-full"
+                    className="flex flex-col items-start gap-2.5 p-3.5 text-left bg-white/50 dark:bg-black/30 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-xl hover:bg-white/70 dark:hover:bg-black/50 hover:shadow-lg hover:-translate-y-0.5 transition-all w-full"
+                    title={`Use prompt: ${prompt.text}`}
                   >
                     {prompt.icon}
                     <span className="text-sm text-gray-700 dark:text-gray-300 font-medium leading-tight">{prompt.text}</span>
-                  </button>
+                  </motion.button>
                 ))}
-              </div>
+              </motion.div>
             )}
 
             {/* Options Toolbar */}
             <div className="mb-2.5 flex flex-wrap items-center gap-2">
-              <div className="flex overflow-x-auto bg-white dark:bg-nova-surface rounded-lg p-1 border border-gray-200 dark:border-gray-700 shadow-sm">
+              <div className="flex overflow-x-auto bg-white/40 dark:bg-black/20 backdrop-blur-md rounded-lg p-1 border border-white/30 dark:border-white/10 shadow-sm">
                 <button
                   type="button"
                   onClick={() => setMode('fast')}
+                  title="Fast standard assistant mode"
                   className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap ${
-                    mode === 'fast' ? 'bg-gray-50 dark:bg-nova-dark text-gray-900 dark:text-white shadow-sm ring-1 ring-gray-600' : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:text-gray-200 hover:bg-nova-dark/50'
+                    mode === 'fast' ? 'bg-white/80 dark:bg-white/10 text-gray-900 dark:text-white shadow-sm ring-1 ring-white/20' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:text-gray-200 hover:bg-white/20 dark:hover:bg-white/5'
                   }`}
                 >
-                  <Zap size={14} /> <span className="hidden sm:inline">Fast</span>
+                  <Zap size={14} className={mode === 'fast' ? 'text-amber-500' : ''} /> <span className="hidden sm:inline">Fast</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setMode('thinking')}
+                  title="Deep reasoning and step-by-step logic"
                   className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap ${
-                    mode === 'thinking' ? 'bg-gray-50 dark:bg-nova-dark text-gray-900 dark:text-white shadow-sm ring-1 ring-gray-600' : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:text-gray-200 hover:bg-nova-dark/50'
+                    mode === 'thinking' ? 'bg-white/80 dark:bg-white/10 text-gray-900 dark:text-white shadow-sm ring-1 ring-white/20' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:text-gray-200 hover:bg-white/20 dark:hover:bg-white/5'
                   }`}
                 >
-                  <BrainCircuit size={14} /> <span className="hidden sm:inline">Thinking</span>
+                  <BrainCircuit size={14} className={mode === 'thinking' ? 'text-purple-500' : ''} /> <span className="hidden sm:inline">Thinking</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setMode('deep-research')}
+                  title="Search the web to answer your questions"
                   className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap ${
-                    mode === 'deep-research' ? 'bg-gray-50 dark:bg-nova-dark text-gray-900 dark:text-white shadow-sm ring-1 ring-gray-600' : 'text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:text-gray-200 hover:bg-nova-dark/50'
+                    mode === 'deep-research' ? 'bg-white/80 dark:bg-white/10 text-gray-900 dark:text-white shadow-sm ring-1 ring-white/20' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:text-gray-200 hover:bg-white/20 dark:hover:bg-white/5'
                   }`}
                 >
-                  <Webhook size={14} /> <span className="hidden sm:inline">DeepSearch AI</span>
+                  <Webhook size={14} className={mode === 'deep-research' ? 'text-emerald-500' : ''} /> <span className="hidden sm:inline">DeepSearch AI</span>
                 </button>
               </div>
 
@@ -846,7 +1077,8 @@ export default function App() {
                     setInput("Generate an image of " + input.replace(/^Generate a 30 sec video of |^Generate audio of /i, ''));
                   }
                 }}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-nova-surface text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:bg-nova-dark hover:text-gray-800 dark:text-gray-200 hover:border-gray-600 shadow-sm transition-colors shrink-0"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-white/30 dark:border-white/10 bg-white/40 dark:bg-black/20 backdrop-blur-md text-gray-700 dark:text-gray-300 hover:bg-white/60 dark:hover:bg-black/40 hover:text-gray-800 dark:hover:text-gray-200 shadow-sm transition-colors shrink-0"
+                title="Format next message as an image generation request"
               >
                 <ImageIcon size={14} /> Image
               </button>
@@ -857,7 +1089,8 @@ export default function App() {
                     setInput("Generate a 30 sec video of " + input.replace(/^Generate an image of |^Generate audio of /i, ''));
                   }
                 }}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-nova-surface text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:bg-nova-dark hover:text-gray-800 dark:text-gray-200 hover:border-gray-600 shadow-sm transition-colors shrink-0"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-white/30 dark:border-white/10 bg-white/40 dark:bg-black/20 backdrop-blur-md text-gray-700 dark:text-gray-300 hover:bg-white/60 dark:hover:bg-black/40 hover:text-gray-800 dark:hover:text-gray-200 shadow-sm transition-colors shrink-0"
+                title="Format next message as a video generation request"
               >
                 <Video size={14} /> Video
               </button>
@@ -868,15 +1101,44 @@ export default function App() {
                     setInput("Generate audio of " + input.replace(/^Generate an image of |^Generate a 30 sec video of /i, ''));
                   }
                 }}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-nova-surface text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:bg-nova-dark hover:text-gray-800 dark:text-gray-200 hover:border-gray-600 shadow-sm transition-colors shrink-0"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-white/30 dark:border-white/10 bg-white/40 dark:bg-black/20 backdrop-blur-md text-gray-700 dark:text-gray-300 hover:bg-white/60 dark:hover:bg-black/40 hover:text-gray-800 dark:hover:text-gray-200 shadow-sm transition-colors shrink-0"
+                title="Format next message as an audio generation request"
               >
                 <Volume2 size={14} /> Audio
               </button>
+
+              <select
+                value={selectedModel}
+                onChange={(e) => setSelectedModel(e.target.value)}
+                className="px-2 py-1.5 text-xs font-medium rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-nova-surface text-gray-600 dark:text-gray-400 focus:outline-none focus:ring-1 focus:ring-nova-accent shadow-sm"
+                title="Select the AI model family"
+              >
+                <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+                <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
+                <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
+                <option value="gemini-exp-1206">Gemini Exp (Free)</option>
+              </select>
+
+              {mode === 'deep-research' && (
+                <select
+                  value={searchEngine}
+                  onChange={(e) => setSearchEngine(e.target.value)}
+                  className="px-2 py-1.5 text-xs font-medium rounded-lg border border-white/30 dark:border-white/10 bg-white/40 dark:bg-black/20 backdrop-blur-md text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-1 focus:ring-nova-accent shadow-sm"
+                  title="Select preferred search engine"
+                >
+                  <option value="google">Google</option>
+                  <option value="duckduckgo">DuckDuckGo</option>
+                  <option value="bing">Bing</option>
+                  <option value="yahoo">Yahoo</option>
+                  <option value="chrome">Chrome Engine</option>
+                  <option value="opera">Opera Engine</option>
+                </select>
+              )}
             </div>
 
             <form
               onSubmit={handleSubmit}
-              className="relative flex flex-col rounded-xl bg-white dark:bg-nova-surface border border-gray-200 dark:border-gray-700 shadow-sm focus-within:border-nova-accent focus-within:ring-1 focus-within:ring-nova-accent transition-all"
+              className="relative flex flex-col rounded-xl bg-white/50 dark:bg-black/30 backdrop-blur-md border border-white/40 dark:border-white/10 shadow-lg focus-within:border-nova-accent/50 focus-within:ring-1 focus-within:ring-nova-accent/50 transition-all"
             >
               {selectedFile && (
                 <div className="flex items-center gap-2 px-3 pt-3 pb-1">
@@ -889,8 +1151,23 @@ export default function App() {
                   </div>
                 </div>
               )}
+              <div className="flex items-center gap-1 px-3 pt-2 pb-0 mx-1 mt-1">
+                <button type="button" onClick={() => insertFormatting('**', '**')} className="p-1.5 text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white rounded-md hover:bg-gray-100/50 dark:hover:bg-white/10 transition-colors" title="Bold">
+                  <Bold size={14} />
+                </button>
+                <button type="button" onClick={() => insertFormatting('*', '*')} className="p-1.5 text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white rounded-md hover:bg-gray-100/50 dark:hover:bg-white/10 transition-colors" title="Italic">
+                  <Italic size={14} />
+                </button>
+                <div className="w-px h-3.5 bg-gray-300 dark:bg-gray-700/50 mx-1"></div>
+                <button type="button" onClick={() => insertFormatting('- ', '')} className="p-1.5 text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white rounded-md hover:bg-gray-100/50 dark:hover:bg-white/10 transition-colors" title="Bullet List">
+                  <List size={14} />
+                </button>
+                <button type="button" onClick={() => insertFormatting('```\n', '\n```')} className="p-1.5 text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white rounded-md hover:bg-gray-100/50 dark:hover:bg-white/10 transition-colors" title="Code Block">
+                  <Code size={14} />
+                </button>
+              </div>
               <div className="flex items-end relative">
-                <div className="relative mb-2.5 ml-2 mt-2">
+                <div className="relative mb-2.5 ml-2 mt-0">
                   <button
                     type="button"
                     onClick={() => setShowAttachMenu(!showAttachMenu)}
@@ -906,7 +1183,7 @@ export default function App() {
                         className="fixed inset-0 z-40 cursor-default" 
                         onClick={() => setShowAttachMenu(false)}
                       />
-                      <div className="absolute bottom-full left-0 mb-2 w-48 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-nova-surface p-1 shadow-xl z-50">
+                      <div className="absolute bottom-full left-0 mb-2 w-48 rounded-xl border border-white/20 dark:border-white/10 bg-white/60 dark:bg-black/40 backdrop-blur-xl p-1 shadow-[0_8px_32px_0_rgba(31,38,135,0.2)] dark:shadow-[0_8px_32px_0_rgba(0,0,0,0.5)] z-50">
                         <button
                           type="button"
                           onClick={() => {
@@ -939,7 +1216,7 @@ export default function App() {
                             openGooglePicker('DOCS');
                             setShowAttachMenu(false);
                           }}
-                          className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:bg-nova-dark hover:text-gray-900 dark:text-white transition-colors"
+                          className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-white/50 dark:hover:bg-white/10 hover:text-gray-900 dark:text-white transition-colors"
                         >
                           <Cloud size={16} /> Google Docs
                         </button>
@@ -949,7 +1226,7 @@ export default function App() {
                             openGooglePicker('SPREADSHEETS');
                             setShowAttachMenu(false);
                           }}
-                          className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:bg-nova-dark hover:text-gray-900 dark:text-white transition-colors"
+                          className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-white/50 dark:hover:bg-white/10 hover:text-gray-900 dark:text-white transition-colors"
                         >
                           <Table size={16} /> Google Sheets
                         </button>
@@ -968,6 +1245,7 @@ export default function App() {
                   }} 
                 />
                 <textarea
+                  ref={textareaRef}
                   rows={1}
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
@@ -988,6 +1266,7 @@ export default function App() {
                     type="submit"
                     disabled={(!input.trim() && !selectedFile) || isLoading}
                     className="flex h-10 w-10 items-center justify-center rounded-lg bg-nova-accent text-white transition-colors hover:bg-indigo-400 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Send message"
                   >
                     {isLoading ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
                   </button>
@@ -1003,8 +1282,8 @@ export default function App() {
 
       {/* Auth Modal */}
       {showAuthModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
-          <div className="w-full max-w-sm rounded-2xl bg-white dark:bg-nova-surface border border-gray-300 dark:border-gray-800 p-6 shadow-2xl relative">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-md p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white/70 dark:bg-black/60 backdrop-blur-2xl border border-white/40 dark:border-white/10 p-6 shadow-2xl relative">
              <button onClick={() => setShowAuthModal(false)} className="absolute top-4 right-4 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:text-white">
                 <X size={20} />
              </button>
@@ -1013,7 +1292,9 @@ export default function App() {
                   <span className="font-display text-2xl font-bold">N</span>
                 </div>
                 <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-1">Welcome to Nova</h2>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Sign in to save your workspaces and history.</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  {freeMessageCount >= 3 ? "You've reached your free preview limit. Sign in to continue!" : "Sign in to save your workspaces and history."}
+                </p>
              </div>
              
              <div className="space-y-3">
@@ -1034,34 +1315,69 @@ export default function App() {
 
       {/* Settings Modal */}
       {showSettingsModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
-          <div className="w-full max-w-md rounded-2xl bg-white dark:bg-nova-surface border border-gray-300 dark:border-gray-800 p-6 shadow-2xl relative">
-             <button onClick={() => setShowSettingsModal(false)} className="absolute top-4 right-4 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:text-white">
-                <X size={20} />
-             </button>
-             <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-6 flex items-center gap-2">
-                <Settings size={24} /> Settings
-             </h2>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-md p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white/70 dark:bg-black/60 backdrop-blur-2xl border border-white/40 dark:border-white/10 shadow-2xl relative max-h-[90vh] flex flex-col overflow-hidden">
+             <div className="p-5 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between shrink-0">
+               <h2 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                  <Settings size={24} /> Settings
+               </h2>
+               <button onClick={() => setShowSettingsModal(false)} className="p-1 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:text-white transition-colors">
+                  <X size={20} />
+               </button>
+             </div>
 
-             <div className="space-y-8">
+             <div className="p-6 space-y-8 overflow-y-auto flex-1">
                {/* Theme Section */}
                <div className="space-y-3">
                  <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-300 uppercase tracking-wider flex items-center gap-2">
                    <Moon size={16} /> Appearance
                  </h3>
-                 <div className="bg-gray-50 dark:bg-nova-dark rounded-xl border border-gray-200 dark:border-gray-700 flex items-center p-1.5 overflow-hidden">
+                 <div className="bg-white/10 dark:bg-black/20 backdrop-blur-md rounded-xl border border-white/20 dark:border-white/10 flex items-center p-1.5 overflow-hidden">
                    <button 
                      onClick={() => theme !== 'light' && handleChangeTheme()}
-                     className={`flex-1 py-2 text-sm font-medium rounded-lg flex items-center justify-center gap-2 transition-all ${theme === 'light' ? 'bg-white text-gray-900 shadow-sm border border-gray-200' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
+                     className={`flex-1 py-2 text-sm font-medium rounded-lg flex items-center justify-center gap-2 transition-all ${theme === 'light' ? 'bg-white/70 dark:bg-white/20 text-gray-900 dark:text-white shadow-[0_4px_12px_rgb(0,0,0,0.1)] border border-white/40' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-white/30 dark:hover:bg-white/10'}`}
                    >
                      <Sun size={16} /> Light Mode
                    </button>
                    <button 
                      onClick={() => theme !== 'dark' && handleChangeTheme()}
-                     className={`flex-1 py-2 text-sm font-medium rounded-lg flex items-center justify-center gap-2 transition-all ${theme === 'dark' ? 'bg-nova-surface text-white shadow-sm border border-gray-700' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
+                     className={`flex-1 py-2 text-sm font-medium rounded-lg flex items-center justify-center gap-2 transition-all ${theme === 'dark' ? 'bg-white/70 dark:bg-white/20 text-gray-900 dark:text-white shadow-[0_4px_12px_rgb(0,0,0,0.1)] border border-white/40' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-white/30 dark:hover:bg-white/10'}`}
                    >
                      <Moon size={16} /> Dark Mode
                    </button>
+                 </div>
+               </div>
+
+               {/* Security Section */}
+               <div className="space-y-3">
+                 <h3 className="text-sm font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider flex items-center gap-2">
+                   <ShieldCheck size={16} /> Security & MFA
+                 </h3>
+                 <div className="bg-white/50 dark:bg-black/30 backdrop-blur-md rounded-xl border border-white/40 dark:border-white/10 p-3 space-y-3 shadow-sm">
+                    <p className="text-xs text-gray-600 dark:text-gray-400">
+                      End-to-End Encryption is active for all communications. Advanced verification requires Identity Platform.
+                    </p>
+                    <button 
+                      onClick={() => alert("Advanced MFA with Google Authenticator requires assigning the Identity Platform role to the project. Setting up hardware flow...")}
+                      className="w-full flex items-center justify-between gap-2 bg-gray-100 dark:bg-black/40 text-gray-800 dark:text-gray-200 p-3 rounded-lg hover:bg-gray-200 dark:hover:bg-white/10 transition-colors text-sm font-medium border border-transparent dark:border-white/5"
+                    >
+                      <span className="flex items-center gap-2"><Smartphone size={16} className="text-blue-500" /> Authenticator App</span>
+                      <span className="text-[10px] bg-gray-200 dark:bg-gray-800 px-2 py-0.5 rounded text-gray-500 font-bold uppercase tracking-wider">Setup</span>
+                    </button>
+                    <button 
+                      onClick={() => alert("Phone verification requires Firebase Identity Platform billing and SMS configuration.")}
+                      className="w-full flex items-center justify-between gap-2 bg-gray-100 dark:bg-black/40 text-gray-800 dark:text-gray-200 p-3 rounded-lg hover:bg-gray-200 dark:hover:bg-white/10 transition-colors text-sm font-medium border border-transparent dark:border-white/5"
+                    >
+                      <span className="flex items-center gap-2"><Smartphone size={16} className="text-emerald-500" /> Phone Number (SMS)</span>
+                      <span className="text-[10px] bg-gray-200 dark:bg-gray-800 px-2 py-0.5 rounded text-gray-500 font-bold uppercase tracking-wider">Setup</span>
+                    </button>
+                    <button 
+                      onClick={() => alert("Passkey setup initiated. WebAuthn requires HTTPS and valid origin configuration.")}
+                      className="w-full flex items-center justify-between gap-2 bg-gray-100 dark:bg-black/40 text-gray-800 dark:text-gray-200 p-3 rounded-lg hover:bg-gray-200 dark:hover:bg-white/10 transition-colors text-sm font-medium border border-transparent dark:border-white/5"
+                    >
+                      <span className="flex items-center gap-2"><Key size={16} className="text-amber-500" /> Passkey (WebAuthn)</span>
+                      <span className="text-[10px] bg-gray-200 dark:bg-gray-800 px-2 py-0.5 rounded text-gray-500 font-bold uppercase tracking-wider">Setup</span>
+                    </button>
                  </div>
                </div>
 
@@ -1106,6 +1422,12 @@ export default function App() {
                     </button>
                  </form>
                </div>
+             </div>
+             
+             <div className="p-4 border-t border-gray-200 dark:border-gray-800 shrink-0 bg-gray-50/50 dark:bg-black/20 flex justify-end">
+                <button onClick={() => setShowSettingsModal(false)} className="px-5 py-2 bg-gray-200 dark:bg-gray-800 text-gray-900 dark:text-white font-medium rounded-xl hover:bg-gray-300 dark:hover:bg-gray-700 transition-colors text-sm">
+                  Close Settings
+                </button>
              </div>
           </div>
         </div>
