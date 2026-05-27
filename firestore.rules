@@ -28,9 +28,11 @@ service cloud.firestore {
 
     function isValidMessage(data) {
       return data.keys().hasAll(['role', 'content', 'createdAt']) &&
-             data.keys().size() == 3 &&
+             data.keys().hasOnly(['role', 'content', 'createdAt', 'image', 'audio']) &&
              data.role is string && data.role.size() <= 20 &&
              data.content is string && data.content.size() <= 100000 &&
+             (data.get('image', '') is string || data.get('image', null) == null) &&
+             (data.get('audio', '') is string || data.get('audio', null) == null) &&
              data.createdAt == request.time;
     }
 

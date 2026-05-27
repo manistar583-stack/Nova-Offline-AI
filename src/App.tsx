@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Send, Loader2, Image as ImageIcon, Paperclip, Zap, BrainCircuit, Microscope, X, Video, Wifi, WifiOff, Plus, Menu, LogOut, Github, Chrome, FileClock, Webhook, Mic, MicOff, Volume2, Cloud, Table, ArrowDownToLine, ArrowDown, Search, Sun, Moon, Settings, MessageSquareHeart, Flag, FileText, Code2, Sparkles, AlignLeft, Trash2, Bold, Italic, List, Code, Globe, ShieldCheck, Smartphone, Key } from 'lucide-react';
+import { Send, Loader2, Image as ImageIcon, Paperclip, Zap, BrainCircuit, Microscope, X, Video, Wifi, WifiOff, Plus, Menu, LogOut, Github, Chrome, FileClock, Webhook, Mic, MicOff, Volume2, Cloud, Table, ArrowDownToLine, ArrowDown, Search, Sun, Moon, Settings, MessageSquareHeart, Flag, FileText, Code2, Sparkles, AlignLeft, Trash2, Bold, Italic, List, Code, Globe, ShieldCheck, Smartphone, Key, Square } from 'lucide-react';
 import * as pdfjsLib from 'pdfjs-dist';
 // @ts-ignore
 import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
@@ -65,6 +65,15 @@ export default function App() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const recognitionRef = useRef<any>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  const stopGeneration = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+      setIsLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -341,9 +350,11 @@ export default function App() {
       // Add deep research / google search mode param handling here
       const apiMode = mode === 'deep-research' ? 'deep-research' : mode;
       
+      abortControllerRef.current = new AbortController();
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: abortControllerRef.current.signal,
         body: JSON.stringify({
           messages: [...messages, userMsg].map((m) => ({
             role: m.role,
@@ -358,7 +369,12 @@ export default function App() {
       });
 
       if (!response.ok) {
-        throw new Error("Network error");
+        let errMsg = "Network error";
+        try {
+          const errData = await response.json();
+          errMsg = errData.error || errMsg;
+        } catch(e) {}
+        throw new Error(errMsg);
       }
 
       const data = await response.json();
@@ -368,6 +384,7 @@ export default function App() {
         role: 'assistant',
         content: data.response,
         timestamp: new Date(),
+        audio: data.audio,
         isTyping: true
       };
       
@@ -378,6 +395,7 @@ export default function App() {
           const msgRef = await addDoc(collection(db, `chats/${activeChatId}/messages`), {
             role: 'assistant',
             content: data.response,
+            ...(data.audio && { audio: data.audio }),
             createdAt: serverTimestamp()
           });
           const oldId = assistantMsg.id;
@@ -387,12 +405,22 @@ export default function App() {
           handleFirestoreError(e, OperationType.CREATE, `chats/${activeChatId}/messages`);
         }
       }
-    } catch (error) {
+    } catch (error: any) {
+      if (error.name === 'AbortError') {
+        const errorMsg: Message = {
+          id: (Date.now() + 1).toString(),
+          role: 'assistant',
+          content: `⚠️ Generation stopped by user.`,
+          timestamp: new Date(),
+        };
+        setMessages((prev) => [...prev, errorMsg]);
+        return;
+      }
       console.error(error);
       const errorMsg: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: "❌ Sorry, I encountered an error while trying to respond.",
+        content: `❌ Sorry, I encountered an error: ${error.message || "while trying to respond."}`,
         timestamp: new Date(),
       };
       setMessages((prev) => [...prev, errorMsg]);
@@ -441,9 +469,11 @@ export default function App() {
     try {
       const apiMode = mode === 'deep-research' ? 'deep-research' : mode;
       
+      abortControllerRef.current = new AbortController();
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: abortControllerRef.current.signal,
         body: JSON.stringify({
           messages: messagesToKeep.map((m) => ({
             role: m.role,
@@ -458,7 +488,12 @@ export default function App() {
       });
 
       if (!response.ok) {
-        throw new Error("Network error");
+        let errMsg = "Network error";
+        try {
+          const errData = await response.json();
+          errMsg = errData.error || errMsg;
+        } catch(e) {}
+        throw new Error(errMsg);
       }
 
       const data = await response.json();
@@ -468,6 +503,7 @@ export default function App() {
         role: 'assistant',
         content: data.response,
         timestamp: new Date(),
+        audio: data.audio,
         isTyping: true
       };
       
@@ -478,6 +514,7 @@ export default function App() {
           const msgRef = await addDoc(collection(db, `chats/${activeChatId}/messages`), {
             role: 'assistant',
             content: data.response,
+            ...(data.audio && { audio: data.audio }),
             createdAt: serverTimestamp()
           });
           const oldId = assistantMsg.id;
@@ -487,12 +524,22 @@ export default function App() {
           handleFirestoreError(e, OperationType.CREATE, `chats/${activeChatId}/messages`);
         }
       }
-    } catch (error) {
+    } catch (error: any) {
+      if (error.name === 'AbortError') {
+        const errorMsg: Message = {
+          id: (Date.now() + 1).toString(),
+          role: 'assistant',
+          content: `⚠️ Generation stopped by user.`,
+          timestamp: new Date(),
+        };
+        setMessages((prev) => [...prev, errorMsg]);
+        return;
+      }
       console.error(error);
       const errorMsg: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: "❌ Sorry, I encountered an error while trying to respond to the edit.",
+        content: `❌ Sorry, I encountered an error: ${error.message || "while trying to respond to the edit."}`,
         timestamp: new Date(),
       };
       setMessages((prev) => [...prev, errorMsg]);
@@ -1114,9 +1161,9 @@ export default function App() {
                 title="Select the AI model family"
               >
                 <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
-                <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
                 <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
-                <option value="gemini-exp-1206">Gemini Exp (Free)</option>
+                <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
+                <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
               </select>
 
               {mode === 'deep-research' && (
@@ -1262,14 +1309,25 @@ export default function App() {
                   >
                     {isRecording ? <MicOff size={18} /> : <Mic size={18} />}
                   </button>
-                  <button
-                    type="submit"
-                    disabled={(!input.trim() && !selectedFile) || isLoading}
-                    className="flex h-10 w-10 items-center justify-center rounded-lg bg-nova-accent text-white transition-colors hover:bg-indigo-400 disabled:opacity-50 disabled:cursor-not-allowed"
-                    title="Send message"
-                  >
-                    {isLoading ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
-                  </button>
+                  {isLoading ? (
+                    <button
+                      type="button"
+                      onClick={stopGeneration}
+                      className="flex h-10 w-10 items-center justify-center rounded-lg bg-gray-500 text-white transition-colors hover:bg-gray-600"
+                      title="Stop generating"
+                    >
+                      <Square size={14} className="fill-current" />
+                    </button>
+                  ) : (
+                    <button
+                      type="submit"
+                      disabled={!input.trim() && !selectedFile}
+                      className="flex h-10 w-10 items-center justify-center rounded-lg bg-nova-accent text-white transition-colors hover:bg-indigo-400 disabled:opacity-50 disabled:cursor-not-allowed"
+                      title="Send message"
+                    >
+                      <Send size={18} />
+                    </button>
+                  )}
                 </div>
               </div>
             </form>

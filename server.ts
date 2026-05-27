@@ -5,6 +5,41 @@ import { GoogleGenAI } from "@google/genai";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
+const FALLBACK_MODELS = [
+  "gemini-2.5-flash",
+  "gemini-2.0-flash",
+  "gemini-1.5-flash",
+  "gemini-1.5-pro"
+];
+
+async function generateWithFallback(options: any, preferredModel: string = "gemini-2.5-flash") {
+  let modelsToTry = [...FALLBACK_MODELS];
+  
+  if (preferredModel) {
+    // Put preferred model at the beginning and remove duplicates
+    modelsToTry = [preferredModel, ...modelsToTry.filter(m => m !== preferredModel)];
+  }
+
+  let lastError;
+  for (const model of modelsToTry) {
+    try {
+      console.log(`Trying model: ${model}`);
+      return await ai.models.generateContent({
+        ...options,
+        model
+      });
+    } catch (error: any) {
+      lastError = error;
+      const isRateLimit = error.status === 429 || error.status === 'RESOURCE_EXHAUSTED' || error.message?.includes('429') || error.message?.includes('Quota exceeded');
+      if (!isRateLimit) {
+        throw error;
+      }
+      console.warn(`Model ${model} hit rate limit (429), falling back...`);
+    }
+  }
+  throw lastError;
+}
+
 const systemPrompt = `You are Nova, an advanced AI assistant that combines the best qualities of Claude (Anthropic) and GPT-4.
 
 Core Personality:
@@ -89,7 +124,8 @@ ${mode === 'deep-research' ? `NOTE: You are in "DeepSearch AI" mode. You are sea
           }
           
           return res.json({
-            response: `🔊 Generated audio:\n\n[generated_audio](${dataUrl} "audio")`
+            response: `🔊 Generated audio output.`,
+            audio: dataUrl
           });
         } catch(err: any) {
           console.error("Audio generation error:", err);
@@ -169,8 +205,7 @@ curl -X POST http://127.0.0.1:8188/prompt -H "Content-Type: application/json" -d
 
       const history = messages.slice(0, -1).map(formatMsg);
 
-      const chatResponse = await ai.models.generateContent({
-        model: modelName,
+      const chatResponse = await generateWithFallback({
         contents: [
           ...history,
           formatMsg(messages[messages.length - 1])
@@ -180,12 +215,25 @@ curl -X POST http://127.0.0.1:8188/prompt -H "Content-Type: application/json" -d
           temperature: mode === 'fast' ? 0.7 : 0.4,
           tools: mode === 'deep-research' ? [{ googleSearch: {} }] : undefined
         }
-      });
+      }, modelName);
 
       res.json({ response: chatResponse.text });
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error calling Gemini API:", error);
-      res.status(500).json({ error: "Failed to generate response" });
+      const status = error.status || 500;
+      let errorMsg = error.message || "Failed to generate response";
+      // Try to parse out deeply nested API error message
+      try {
+        if (errorMsg.startsWith('{')) {
+          const parsed = JSON.parse(errorMsg);
+          if (parsed.error && parsed.error.message) {
+            errorMsg = parsed.error.message;
+          }
+        }
+      } catch (e) {
+        // ignore parsing errors
+      }
+      res.status(status).json({ error: errorMsg });
     }
   });
 
@@ -195,15 +243,14 @@ curl -X POST http://127.0.0.1:8188/prompt -H "Content-Type: application/json" -d
       const { message } = req.body;
       const titlePrompt = `Generate a very concise, 2-5 word title for a conversation that starts with the following message. Do not include quotes or extra punctuation.\n\nMessage: "${message}"`;
       
-      const chatResponse = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
+      const chatResponse = await generateWithFallback({
         contents: [
           { role: "user", parts: [{ text: titlePrompt }] }
         ],
         config: {
           temperature: 0.7,
         }
-      });
+      }, "gemini-2.5-flash");
       res.json({ title: chatResponse.text?.trim() || "New Chat" });
     } catch (error) {
       console.error("Error generating title:", error);
@@ -218,15 +265,14 @@ curl -X POST http://127.0.0.1:8188/prompt -H "Content-Type: application/json" -d
       const history = messages.map((m: any) => `${m.role.toUpperCase()}: ${m.content}`).join('\n\n');
       const summarizePrompt = `Provide a very concise, high-level summary (1-3 sentences) of the following conversation:\n\n${history}`;
       
-      const chatResponse = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
+      const chatResponse = await generateWithFallback({
         contents: [
           { role: "user", parts: [{ text: summarizePrompt }] }
         ],
         config: {
           temperature: 0.3,
         }
-      });
+      }, "gemini-2.5-flash");
       res.json({ summary: chatResponse.text?.trim() || "No summary available." });
     } catch (error) {
       console.error("Error generating summary:", error);

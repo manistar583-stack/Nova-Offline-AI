@@ -6,7 +6,7 @@ export function CustomAudioPlayer({ src }: { src: string }) {
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const sourceRef = useRef<MediaElementAudioSourceNode | null>(null);
-  const animationRef = useRef<number>();
+  const animationRef = useRef<number>(0);
   const barsRef = useRef<(HTMLDivElement | null)[]>([]);
 
   const [isPlaying, setIsPlaying] = useState(false);
@@ -70,21 +70,9 @@ export function CustomAudioPlayer({ src }: { src: string }) {
   }, []);
 
   useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
-
     if (isPlaying) {
-      audio.play().then(() => {
-        if (audioContextRef.current?.state === 'suspended') {
-          audioContextRef.current.resume();
-        }
-        animationRef.current = requestAnimationFrame(updateWaveform);
-      }).catch(err => {
-        console.error("Audio playback error:", err);
-        setIsPlaying(false);
-      });
+      animationRef.current = requestAnimationFrame(updateWaveform);
     } else {
-      audio.pause();
       if (animationRef.current) cancelAnimationFrame(animationRef.current);
       resetWaveform();
     }
@@ -116,9 +104,26 @@ export function CustomAudioPlayer({ src }: { src: string }) {
     };
   }, [resetWaveform]);
 
-  const togglePlayPause = () => {
+  const togglePlayPause = async () => {
     initAudioContext();
-    setIsPlaying(!isPlaying);
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    if (isPlaying) {
+      audio.pause();
+      setIsPlaying(false);
+    } else {
+      try {
+        await audio.play();
+        if (audioContextRef.current?.state === 'suspended') {
+          await audioContextRef.current.resume();
+        }
+        setIsPlaying(true);
+      } catch (err) {
+        console.error("Audio playback error:", err);
+        setIsPlaying(false);
+      }
+    }
   };
 
   const toggleMute = () => {
@@ -161,7 +166,7 @@ export function CustomAudioPlayer({ src }: { src: string }) {
           {[...Array(30)].map((_, i) => (
             <div 
               key={i}
-              ref={el => barsRef.current[i] = el}
+              ref={el => { barsRef.current[i] = el; }}
               className="w-1 rounded-full bg-nova-accent/80 transition-all duration-[50ms]"
               style={{
                 height: '4px',

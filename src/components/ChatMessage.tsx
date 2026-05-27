@@ -288,6 +288,11 @@ export function ChatMessage({ message, onEdit }: ChatMessageProps) {
             </div>
           ) : (
             <div className="prose prose-invert max-w-none text-gray-700 dark:text-gray-300">
+              {message.audio && (
+                <div className="mb-4">
+                  <CustomAudioPlayer src={message.audio} />
+                </div>
+              )}
               {message.image && (
                 <div className="mb-4">
                   <ImageViewer src={message.image} alt="User Uploaded Image" />

@@ -44,7 +44,7 @@ export function ImageViewer({ src, alt }: { src: string; alt: string }) {
   return (
     <>
       <div className="group relative mt-4 inline-block w-full max-w-2xl overflow-hidden rounded-xl bg-black ring-1 ring-white/10">
-        <img src={src} alt={alt} className="w-full h-auto object-contain transition-transform duration-700 ease-out group-hover:scale-[1.02]" loading="lazy" />
+        <img src={src} alt={alt} referrerPolicy="no-referrer" className="w-full h-auto object-contain transition-transform duration-700 ease-out group-hover:scale-[1.02]" loading="lazy" />
         <div className="absolute top-4 right-4 flex gap-2 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
           <button onClick={() => setIsFullscreen(true)} className="flex h-9 w-9 items-center justify-center rounded-lg bg-black/60 text-gray-900 dark:text-white backdrop-blur-md transition-colors hover:bg-black/80 hover:text-nova-accent" title="Fullscreen">
             <Maximize size={18} />
@@ -63,7 +63,7 @@ export function ImageViewer({ src, alt }: { src: string; alt: string }) {
           <button className="absolute top-6 right-6 rounded-full bg-white/10 p-2.5 text-gray-900 dark:text-white backdrop-blur-md transition-colors hover:bg-white/20 hover:text-nova-accent" onClick={() => setIsFullscreen(false)}>
             <X size={24} />
           </button>
-          <img src={src} alt={alt} className="max-h-full max-w-full object-contain rounded-lg shadow-2xl" onClick={(e) => e.stopPropagation()} />
+          <img src={src} alt={alt} referrerPolicy="no-referrer" className="max-h-full max-w-full object-contain rounded-lg shadow-2xl" onClick={(e) => e.stopPropagation()} />
         </div>
       )}
     </>
@@ -154,6 +154,7 @@ export function VideoViewer({ src, alt }: { src: string; alt: string }) {
       >
         <img 
           src={src} 
+          referrerPolicy="no-referrer"
           className={`w-full h-full object-cover transition-transform ease-linear origin-center ${status === 'playing' ? 'scale-110 duration-[30000ms]' : status === 'rendering' ? 'scale-105 blur-sm opacity-50 duration-700' : 'scale-100 duration-500'}`}
           alt={alt} 
           loading="lazy" 
@@ -241,6 +242,7 @@ export function VideoViewer({ src, alt }: { src: string; alt: string }) {
           <div className="relative w-full max-w-[90vw] max-h-[90vh] aspect-video group" onClick={e => e.stopPropagation()}>
             <img 
               src={src} 
+              referrerPolicy="no-referrer"
               className={`w-full h-full object-contain transition-transform ease-linear origin-center ${status === 'playing' ? 'scale-105 duration-[30000ms]' : 'scale-100 duration-500'}`}
               alt={alt} 
             />
